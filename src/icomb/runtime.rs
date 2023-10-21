@@ -1,8 +1,15 @@
-use std::{sync::atomic::{AtomicUsize, Ordering}, time::Instant};
+use std::{
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Instant,
+};
 
 use tracing::info;
 
-use super::{heap::Heap, CellPtr, WirePtr, TermPtr, net::{Net, Equation, Cell}};
+use super::{
+    heap::Heap,
+    net::{Cell, Equation, Net},
+    CellPtr, TermPtr, VarPtr,
+};
 
 pub struct Runtime {
     anni: AtomicUsize, // anni rewrites
@@ -24,10 +31,12 @@ impl Runtime {
         }
     }
 
+    #[inline(always)]
     pub fn annihilations(&self) -> usize {
         self.anni.load(Ordering::SeqCst)
     }
 
+    #[inline(always)]
     fn inc_annihilations(&self) {
         self.anni.fetch_add(1, Ordering::SeqCst);
     }
@@ -40,36 +49,50 @@ impl Runtime {
         self.comm.fetch_add(1, Ordering::SeqCst);
     }
 
+    #[inline(always)]
     pub fn erasures(&self) -> usize {
         self.eras.load(Ordering::SeqCst)
     }
 
+    #[inline(always)]
     fn inc_erasures(&self) {
         self.eras.fetch_add(1, Ordering::SeqCst);
     }
 
+    #[inline(always)]
     pub fn redexes(&self) -> usize {
         self.redexes.load(Ordering::SeqCst)
     }
 
+    #[inline(always)]
     fn inc_redexes(&self) {
         self.redexes.fetch_add(1, Ordering::SeqCst);
     }
 
+    #[inline(always)]
     pub fn binds(&self) -> usize {
         self.binds.load(Ordering::SeqCst)
     }
 
+    #[inline(always)]
     pub fn inc_binds(&self) {
         self.binds.fetch_add(1, Ordering::SeqCst);
     }
+    #[inline(always)]
     pub fn connects(&self) -> usize {
         self.connects.load(Ordering::SeqCst)
     }
 
+    #[inline(always)]
     pub fn inc_connects(&self) {
         self.connects.fetch_add(1, Ordering::SeqCst);
     }
+
+    #[inline(always)]
+    fn thread_id(&self) -> usize {
+        return rayon::current_thread_index().unwrap();
+    }
+
     pub fn eval(&mut self, net: &mut Net) {
         let now = Instant::now();
         rayon::scope(|scope| {
@@ -77,7 +100,7 @@ impl Runtime {
                 .drain(..)
                 .for_each(|eqn| self.eval_equation(scope, &net.heap, eqn));
         });
-        info!("Net evaluated in {}", now.elapsed().as_millis());
+        info!("Net evaluated in {:0.00}", now.elapsed().as_nanos() / 1000);
     }
 
     fn eval_equation<'scope>(
@@ -91,9 +114,7 @@ impl Runtime {
                 left_ptr,
                 right_ptr,
             } => self.eval_redex(scope, heap, left_ptr, right_ptr),
-            Equation::Bind { wire_ptr, cell_ptr } => {
-                self.eval_bind(scope, heap, wire_ptr, cell_ptr)
-            }
+            Equation::Bind { var_ptr, cell_ptr } => self.eval_bind(scope, heap, var_ptr, cell_ptr),
             Equation::Connect {
                 left_ptr,
                 right_ptr,
@@ -130,17 +151,17 @@ impl Runtime {
                 // nothing free
             }
             // Annihilate: CTR-CTR / DUP-DUP
-            (CellPtr::Ctr(_), CellPtr::Ctr(_)) | (CellPtr::Dup(_), CellPtr::Dup(_)) => {
+            (CellPtr::CtrPtr(_), CellPtr::CtrPtr(_)) | (CellPtr::DupPtr(_), CellPtr::DupPtr(_)) => {
                 // stats
                 self.inc_annihilations();
 
-                let left_cell: Cell = heap.get_cell(left_cell_ptr).unwrap();
-                let right_cell: Cell = heap.get_cell(left_cell_ptr).unwrap();
+                let left_cell = heap.consume_cell(left_cell_ptr).unwrap();
+                let right_cell = heap.consume_cell(left_cell_ptr).unwrap();
 
-                let eqn_0 = Self::to_equation(left_cell.port_0(), right_cell.port_0());
+                let eqn_0 = Self::to_equation(left_cell.0, right_cell.0);
                 self.eval_equation(scope, heap, eqn_0);
 
-                let eqn_1 = Self::to_equation(left_cell.port_1(), right_cell.port_1());
+                let eqn_1 = Self::to_equation(left_cell.1, right_cell.1);
                 self.eval_equation(scope, heap, eqn_1);
 
                 // TODO reuse?
@@ -148,54 +169,47 @@ impl Runtime {
                 heap.free_cell(right_cell_ptr); // TODO can we reuse this?
             }
             // Commute: ERA-DUP / ERA-CTR
-            (CellPtr::Era, cell_ptr @ CellPtr::Ctr(_))
-            | (cell_ptr @ CellPtr::Ctr(_), CellPtr::Era)
-            | (CellPtr::Era, cell_ptr @ CellPtr::Dup(_))
-            | (cell_ptr @ CellPtr::Dup(_), CellPtr::Era) => {
+            (CellPtr::Era, cell_ptr @ CellPtr::CtrPtr(_))
+            | (cell_ptr @ CellPtr::CtrPtr(_), CellPtr::Era)
+            | (CellPtr::Era, cell_ptr @ CellPtr::DupPtr(_))
+            | (cell_ptr @ CellPtr::DupPtr(_), CellPtr::Era) => {
                 // stats
                 self.inc_comm();
 
                 //
-                let ctr_cell: Cell = heap.get_cell(cell_ptr).unwrap();
-                let eqn_0 = Self::to_equation(CellPtr::Era.into(), ctr_cell.port_0());
+                let ctr_cell = heap.consume_cell(cell_ptr).unwrap();
+                let eqn_0 = Self::to_equation(CellPtr::Era.into(), ctr_cell.0);
                 self.eval_equation(scope, heap, eqn_0);
-                let eqn_1 = Self::to_equation(CellPtr::Era.into(), ctr_cell.port_1());
+                let eqn_1 = Self::to_equation(CellPtr::Era.into(), ctr_cell.1);
                 self.eval_equation(scope, heap, eqn_1);
 
                 // TODO reuse
                 heap.free_cell(cell_ptr); // TODO: can we reuse this?
             }
             // Commute: CTR-DUP
-            (ctr_ptr @ CellPtr::Ctr(_), dup_ptr @ CellPtr::Dup(_))
-            | (dup_ptr @ CellPtr::Dup(_), ctr_ptr @ CellPtr::Ctr(_)) => {
+            (ctr_ptr @ CellPtr::CtrPtr(_), dup_ptr @ CellPtr::DupPtr(_))
+            | (dup_ptr @ CellPtr::DupPtr(_), ctr_ptr @ CellPtr::CtrPtr(_)) => {
                 // stats
                 self.inc_comm();
 
-                let ctr: Cell = heap.get_cell(ctr_ptr).unwrap();
-                let dup: Cell = heap.get_cell(dup_ptr).unwrap();
+                let ctr = heap.consume_cell(ctr_ptr).unwrap();
+                let dup = heap.consume_cell(dup_ptr).unwrap();
 
-                let ctr_ptr_2 = heap.alloc_cell();
-                let dup_ptr_2 = heap.alloc_cell();
+                let var_ptr_1 = heap.alloc_var();
+                let var_ptr_2 = heap.alloc_var();
+                let var_ptr_3 = heap.alloc_var();
+                let var_ptr_4 = heap.alloc_var();
 
-                let eqn1 = Self::to_equation(ctr.port_0(), dup_ptr.into());
-                let eqn2 = Self::to_equation(ctr.port_1(), dup_ptr_2.into());
-                let eqn3 = Self::to_equation(dup.port_0(), ctr_ptr.into());
-                let eqn4 = Self::to_equation(dup.port_1(), ctr_ptr_2.into());
+                let ctr_ptr_2 = heap.alloc_ctr((var_ptr_3, var_ptr_4).into());
+                let dup_ptr_2 = heap.alloc_ctr((var_ptr_3, var_ptr_4).into());
 
-                let wire_ptr_1 = heap.alloc_wire();
-                let wire_ptr_2 = heap.alloc_wire();
-                let wire_ptr_3 = heap.alloc_wire();
-                let wire_ptr_4 = heap.alloc_wire();
+                let eqn1 = Self::to_equation(ctr.0, dup_ptr.into());
+                let eqn2 = Self::to_equation(ctr.1, dup_ptr_2.into());
+                let eqn3 = Self::to_equation(dup.0, ctr_ptr.into());
+                let eqn4 = Self::to_equation(dup.1, ctr_ptr_2.into());
 
-                let ctr_1 = Cell::Ctr(wire_ptr_1.into(), wire_ptr_2.into());
-                let dup_1 = Cell::Dup(wire_ptr_1.into(), wire_ptr_2.into());
-                let ctr_2: Cell = Cell::Ctr(wire_ptr_3.into(), wire_ptr_4.into());
-                let dup_2 = Cell::Dup(wire_ptr_3.into(), wire_ptr_4.into());
-
-                heap.set_cell(ctr_ptr, ctr_1); // NOTE: ctr_ptr is reused here!
-                heap.set_cell(ctr_ptr_2, ctr_2);
-                heap.set_cell(dup_ptr, dup_1); // NOTE: dup_ctr is reused here!
-                heap.set_cell(dup_ptr_2, dup_2);
+                heap.set_cell(ctr_ptr, Cell::Ctr(var_ptr_1.into(), var_ptr_2.into())); // NOTE: ctr_ptr is reused here!
+                heap.set_cell(dup_ptr, Cell::Dup(var_ptr_1.into(), var_ptr_2.into())); // NOTE: dup_ctr is reused here!
 
                 self.eval_equation(scope, heap, eqn1);
                 self.eval_equation(scope, heap, eqn2);
@@ -209,14 +223,15 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         heap: &'scope Heap,
-        wire_ptr: WirePtr,
+        var_ptr: VarPtr,
         cell_ptr: CellPtr,
     ) {
         self.inc_binds();
 
-        match heap.set_or_get_wire(wire_ptr, cell_ptr) {
+        match heap.swap_var(var_ptr, cell_ptr) {
             Some(other_cell_ptr) => {
                 self.rewrite_redex(scope, heap, cell_ptr, other_cell_ptr);
+                heap.free_var(var_ptr); // TODO: only free if bound variable
             }
             None => {
                 // value set for the first time
@@ -228,34 +243,42 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         heap: &'scope Heap,
-        left_ptr: WirePtr,
-        right_ptr: WirePtr,
+        left_ptr: VarPtr,
+        right_ptr: VarPtr,
     ) {
         self.inc_connects();
 
-        // match (heap.get_wire(left_ptr), heap.get_wire(right_ptr)) {
-        //     (Some(left_cell_ptr), Some(right_cell_ptr)) => {
-        //         self.rewrite_redex(scope, heap, left_cell_ptr, right_cell_ptr)
-        //     }
-        //     (None, Some(cell_ptr)) => self.eval_bind(scope, heap, left_ptr, cell_ptr),
-        //     (Some(cell_ptr), None) => self.eval_bind(scope, heap, right_ptr, cell_ptr),
-        //     (None, None) => {
-        //         // TODO: See #1
-        //     }
-        // }
+        match (heap.read_var(left_ptr), heap.read_var(right_ptr)) {
+            (Some(left_cell_ptr), Some(right_cell_ptr)) => {
+                self.rewrite_redex(scope, heap, left_cell_ptr, right_cell_ptr);
+                heap.free_var(left_ptr);
+                heap.free_var(right_ptr);
+            }
+            (None, Some(cell_ptr)) => {
+                heap.free_var(right_ptr);
+                self.eval_bind(scope, heap, left_ptr, cell_ptr)
+            }
+            (Some(cell_ptr), None) => {
+                heap.free_var(left_ptr);
+                self.eval_bind(scope, heap, right_ptr, cell_ptr)
+            }
+            (None, None) => {
+                // TODO: See #1
+            }
+        }
     }
 
     fn to_equation(left_ptr: TermPtr, right_ptr: TermPtr) -> Equation {
         match (left_ptr, right_ptr) {
-            (TermPtr::Cell(left_ptr), TermPtr::Cell(right_ptr)) => Equation::Redex {
+            (TermPtr::CellPtr(left_ptr), TermPtr::CellPtr(right_ptr)) => Equation::Redex {
                 left_ptr,
                 right_ptr,
             },
-            (TermPtr::Cell(cell_ptr), TermPtr::Wire(wire_ptr))
-            | (TermPtr::Wire(wire_ptr), TermPtr::Cell(cell_ptr)) => {
-                Equation::Bind { wire_ptr, cell_ptr }
+            (TermPtr::CellPtr(cell_ptr), TermPtr::VarPtr(var_ptr))
+            | (TermPtr::VarPtr(var_ptr), TermPtr::CellPtr(cell_ptr)) => {
+                Equation::Bind { var_ptr, cell_ptr }
             }
-            (TermPtr::Wire(left_ptr), TermPtr::Wire(right_ptr)) => Equation::Connect {
+            (TermPtr::VarPtr(left_ptr), TermPtr::VarPtr(right_ptr)) => Equation::Connect {
                 left_ptr,
                 right_ptr,
             },

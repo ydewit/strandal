@@ -2,37 +2,48 @@ pub mod heap;
 pub mod net;
 pub mod runtime;
 
-use self::heap::HeapPtr;
+use self::heap::Ptr;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub enum TermPtr {
-    Cell(CellPtr),
-    Wire(WirePtr),
+    CellPtr(CellPtr),
+    VarPtr(VarPtr),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum CellPtr {
     Era,
-    Ctr(HeapPtr),
-    Dup(HeapPtr),
+    CtrPtr(Ptr),
+    DupPtr(Ptr),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct WirePtr(HeapPtr);
+pub struct VarPtr(Ptr);
 
 impl From<CellPtr> for TermPtr {
     fn from(value: CellPtr) -> Self {
-        TermPtr::Cell(value)
+        TermPtr::CellPtr(value)
     }
 }
 
 impl From<CellPtr> for u64 {
     fn from(value: CellPtr) -> Self {
         match value {
-            CellPtr::Ctr(ptr) => (ptr.index as u64) << 1 | false as u64,
-            CellPtr::Dup(ptr) => (ptr.index as u64) << 1 | true as u64,
+            CellPtr::CtrPtr(ptr) => (ptr.index as u64) << 1 | false as u64,
+            CellPtr::DupPtr(ptr) => (ptr.index as u64) << 1 | true as u64,
             CellPtr::Era => 0,
         }
+    }
+}
+
+// Linear wire
+pub struct Port {
+    ptr: VarPtr,
+}
+
+impl From<Port> for TermPtr {
+    fn from(value: Port) -> Self {
+        value.ptr.into()
     }
 }
 
@@ -43,19 +54,19 @@ impl TryFrom<u64> for CellPtr {
         let index = value >> 1;
         let is_dup = value & 1 == 1;
         if is_dup {
-            Ok(CellPtr::Dup(HeapPtr {
+            Ok(CellPtr::DupPtr(Ptr {
                 index: index as u32,
             }))
         } else {
-            Ok(CellPtr::Ctr(HeapPtr {
+            Ok(CellPtr::CtrPtr(Ptr {
                 index: index as u32,
             }))
         }
     }
 }
 
-impl From<WirePtr> for TermPtr {
-    fn from(value: WirePtr) -> Self {
-        TermPtr::Wire(value)
+impl From<VarPtr> for TermPtr {
+    fn from(value: VarPtr) -> Self {
+        TermPtr::VarPtr(value)
     }
 }
