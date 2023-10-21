@@ -3,7 +3,7 @@ use std::{
     time::Instant,
 };
 
-use tracing::info;
+use tracing::{debug, info};
 
 use super::{
     heap::Heap,
@@ -100,7 +100,10 @@ impl Runtime {
                 .drain(..)
                 .for_each(|eqn| self.eval_equation(scope, &net.heap, eqn));
         });
-        info!("Net evaluated in {:0.00}", now.elapsed().as_nanos() / 1000);
+        info!(
+            "Net evaluated in {:0.0} microseconds",
+            now.elapsed().as_nanos() / 1000
+        );
     }
 
     fn eval_equation<'scope>(
@@ -149,14 +152,20 @@ impl Runtime {
                 // PUFF! Do nothing
                 self.inc_erasures();
                 // nothing free
+
+                debug!(
+                    "eval REDEX  : ≪  {} >< {} ≫",
+                    heap.display_cell(left_cell_ptr),
+                    heap.display_cell(left_cell_ptr)
+                );
             }
             // Annihilate: CTR-CTR / DUP-DUP
             (CellPtr::CtrPtr(_), CellPtr::CtrPtr(_)) | (CellPtr::DupPtr(_), CellPtr::DupPtr(_)) => {
                 // stats
                 self.inc_annihilations();
 
-                let left_cell = heap.consume_cell(left_cell_ptr).unwrap();
-                let right_cell = heap.consume_cell(left_cell_ptr).unwrap();
+                let left_cell = heap.consume_cell(left_cell_ptr);
+                let right_cell = heap.consume_cell(left_cell_ptr);
 
                 let eqn_0 = Self::to_equation(left_cell.0, right_cell.0);
                 self.eval_equation(scope, heap, eqn_0);
@@ -177,7 +186,7 @@ impl Runtime {
                 self.inc_comm();
 
                 //
-                let ctr_cell = heap.consume_cell(cell_ptr).unwrap();
+                let ctr_cell = heap.consume_cell(cell_ptr);
                 let eqn_0 = Self::to_equation(CellPtr::Era.into(), ctr_cell.0);
                 self.eval_equation(scope, heap, eqn_0);
                 let eqn_1 = Self::to_equation(CellPtr::Era.into(), ctr_cell.1);
@@ -192,8 +201,8 @@ impl Runtime {
                 // stats
                 self.inc_comm();
 
-                let ctr = heap.consume_cell(ctr_ptr).unwrap();
-                let dup = heap.consume_cell(dup_ptr).unwrap();
+                let ctr = heap.consume_cell(ctr_ptr);
+                let dup = heap.consume_cell(dup_ptr);
 
                 let var_ptr_1 = heap.alloc_var();
                 let var_ptr_2 = heap.alloc_var();
@@ -228,6 +237,8 @@ impl Runtime {
     ) {
         self.inc_binds();
 
+        debug!("eval BIND   : ≪  {} ← {} ≫", var_ptr, heap.display_cell(cell_ptr));
+
         match heap.swap_var(var_ptr, cell_ptr) {
             Some(other_cell_ptr) => {
                 self.rewrite_redex(scope, heap, cell_ptr, other_cell_ptr);
@@ -247,6 +258,8 @@ impl Runtime {
         right_ptr: VarPtr,
     ) {
         self.inc_connects();
+
+        debug!("eval CONNECT: {} ↔ {}", left_ptr, right_ptr);
 
         match (heap.read_var(left_ptr), heap.read_var(right_ptr)) {
             (Some(left_cell_ptr), Some(right_cell_ptr)) => {

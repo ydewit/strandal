@@ -1,12 +1,25 @@
-use std::sync::atomic::AtomicU64;
+use std::{fmt::Display, sync::atomic::AtomicU64};
 
-use super::{heap::Heap, CellPtr, Port, TermPtr, VarPtr};
+use super::{
+    display::{CellPtrDisplay, TermPtrDisplay},
+    heap::Heap,
+    CellPtr, Port, TermPtr, VarPtr,
+};
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Cell {
     Ctr(TermPtr, TermPtr),
     Dup(TermPtr, TermPtr),
+}
+
+impl Display for Cell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Cell::Ctr(_, _) => write!(f, "(Ctr {} {})", 0, 0),
+            Cell::Dup(_, _) => write!(f, "(Dup {} {})", 0, 0),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -74,11 +87,6 @@ impl From<Cell> for Term {
     }
 }
 
-// pub struct NetBuilder<'a> {
-//     net: &mut 'a Net,
-// }
-
-// impl<'a> NetBuilder<'a> {
 impl Net {
     pub fn var(&mut self) -> (Port, Port) {
         let ptr = self.heap.alloc_var();
@@ -163,6 +171,61 @@ impl TryFrom<Term> for Cell {
         match value {
             Term::Cell(cell) => Ok(cell),
             _ => Err(value),
+        }
+    }
+}
+
+struct NetHead<'a>(&'a Net);
+impl Display for NetHead<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let head = &self.0.head;
+        let mut head_iter = head.iter();
+        if let Some(head) = head_iter.next() {
+            write!(f, "{}", head)?;
+            for head in head_iter {
+                write!(f, ", {}", head)?;
+            }
+        }
+        return Ok(());
+    }
+}
+
+struct NetBody<'a>(&'a Net);
+impl Display for NetBody<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let body = &self.0.body;
+        let mut body_iter = body.iter();
+        if let Some(eqn) = body_iter.next() {
+            write!(f, "{}", EquationDisplay(eqn, &self.0.heap))?;
+            for eqn in body_iter {
+                write!(f, ", {}", EquationDisplay(eqn, &self.0.heap))?;
+            }
+        }
+        return Ok(());
+    }
+}
+impl Display for Net {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return write!(f, "≪ {} | {} ≫", NetHead(self), NetBody(self));
+    }
+}
+
+pub struct EquationDisplay<'a>(&'a Equation, &'a Heap);
+
+impl<'a> Display for EquationDisplay<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Equation::Redex {
+                left_ptr,
+                right_ptr,
+            } => write!(f, "{}", self.1.display_redex(*left_ptr, *right_ptr)),
+            Equation::Bind { var_ptr, cell_ptr } => {
+                write!(f, "{} ↔ {}", var_ptr, self.1.display_cell(*cell_ptr))
+            }
+            Equation::Connect {
+                left_ptr,
+                right_ptr,
+            } => write!(f, "{} ↔ {}", left_ptr, right_ptr),
         }
     }
 }

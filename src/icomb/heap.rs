@@ -7,6 +7,7 @@ use std::alloc::alloc;
 use tracing::{debug, warn};
 
 use super::{
+    display::{CellPtrDisplay, TermPtrDisplay},
     net::{Cell, Term, Var},
     CellPtr, TermPtr, VarPtr,
 };
@@ -103,18 +104,30 @@ impl Heap {
     }
 
     /// Consume the cell identified by the given CellPtr. Note that we consume the cell linearly
-    pub fn consume_cell(&self, ptr: CellPtr) -> Option<(TermPtr, TermPtr)> {
+    pub fn consume_cell(&self, ptr: CellPtr) -> (TermPtr, TermPtr) {
         match ptr {
             CellPtr::Era => panic!("Cannot get unboxed ERA"),
             CellPtr::CtrPtr(ptr) | CellPtr::DupPtr(ptr) => {
                 debug!("Consumed CELL[{:?}]", ptr.index);
                 match self._get_term(ptr) {
                     Some(Term::Cell(Cell::Ctr(port_0, port_1)))
-                    | Some(Term::Cell(Cell::Dup(port_0, port_1))) => Some((port_0, port_1)),
+                    | Some(Term::Cell(Cell::Dup(port_0, port_1))) => (port_0, port_1),
                     Some(Term::Var(_)) => panic!("Expected cell, found var"),
                     None => panic!("Expected cell, found nothing"),
                 }
             }
+        }
+    }
+
+    pub(crate) fn read_cell(&self, ptr: CellPtr) -> (TermPtr, TermPtr) {
+        match ptr {
+            CellPtr::Era => panic!("Cannot get unboxed ERA"),
+            CellPtr::CtrPtr(ptr) | CellPtr::DupPtr(ptr) => match self._get_term(ptr) {
+                Some(Term::Cell(Cell::Ctr(port_0, port_1)))
+                | Some(Term::Cell(Cell::Dup(port_0, port_1))) => (port_0, port_1),
+                Some(Term::Var(_)) => panic!("Expected cell, found var"),
+                None => panic!("Expected cell, found nothing"),
+            },
         }
     }
 
@@ -248,6 +261,36 @@ impl Heap {
             heap: self,
         }
     }
+
+    pub fn display_term(&self, term_ptr: TermPtr) -> TermPtrDisplay {
+        TermPtrDisplay {
+            term_ptr,
+            heap: self,
+        }
+    }
+
+    pub fn display_cell(&self, cell_ptr: CellPtr) -> CellPtrDisplay {
+        CellPtrDisplay {
+            cell_ptr,
+            heap: self,
+        }
+    }
+
+    pub fn display_redex(&self, left_ptr: CellPtr, right_ptr: CellPtr) -> String {
+        format!(
+            "{} ⋈ {}",
+            self.display_cell(left_ptr),
+            self.display_cell(right_ptr)
+        )
+    }
+
+    pub fn display_bind(&self, var_ptr: VarPtr, cell_ptr: CellPtr) -> String {
+        format!("{} ← {}", var_ptr, self.display_cell(cell_ptr))
+    }
+
+    pub fn display_connect(&self, left_ptr: VarPtr, right_ptr: VarPtr) -> String {
+        format!("{} ↔ {}", left_ptr, right_ptr)
+    }
 }
 
 pub struct HeapIter<'a> {
@@ -283,7 +326,7 @@ mod tests {
         assert_eq!(ptr, CellPtr::CtrPtr(Ptr::new(0)));
         assert_eq!(
             heap.consume_cell(ptr),
-            Some((CellPtr::Era.into(), CellPtr::Era.into()))
+            (CellPtr::Era.into(), CellPtr::Era.into())
         )
     }
 
@@ -306,7 +349,7 @@ mod tests {
         assert_eq!(cell_ptr, CellPtr::CtrPtr(Ptr::new(0)));
         assert_eq!(
             heap.consume_cell(cell_ptr),
-            Some((CellPtr::Era.into(), CellPtr::Era.into()))
+            (CellPtr::Era.into(), CellPtr::Era.into())
         );
     }
 
@@ -321,7 +364,7 @@ mod tests {
         assert_eq!(cell_ptr, CellPtr::DupPtr(Ptr::new(0)));
         assert_eq!(
             heap.consume_cell(cell_ptr),
-            Some((CellPtr::Era.into(), CellPtr::Era.into()))
+            (CellPtr::Era.into(), CellPtr::Era.into())
         );
     }
 }

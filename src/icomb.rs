@@ -1,6 +1,7 @@
 pub mod heap;
 pub mod net;
 pub mod runtime;
+mod display;
 
 use self::heap::Ptr;
 
