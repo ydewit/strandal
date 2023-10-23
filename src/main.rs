@@ -4,7 +4,7 @@ mod lambda;
 use icomb::net::Net;
 use lambda::{dup, id};
 
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 use crate::{icomb::runtime::Runtime, lambda::m_2};
 
@@ -22,7 +22,7 @@ fn main() {
     let mut runtime = Runtime::new();
     runtime.eval(&mut net);
 
-    for term in net.heap.iter().enumerate() {
+    for term in net.store.iter().enumerate() {
         debug!("Heap: {} -> {:?}", term.0, term.1);
     }
 

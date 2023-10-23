@@ -1,105 +1,50 @@
-use std::{fmt::Display, sync::atomic::AtomicU64};
+pub mod cell;
+pub mod equation;
+pub mod term;
+pub mod var;
 
-use super::{
-    display::{CellPtrDisplay, TermPtrDisplay},
-    heap::Heap,
-    CellPtr, Port, TermPtr, VarPtr,
+use std::fmt::Display;
+
+use tracing::debug;
+
+use self::{
+    cell::{Cell, CellPtr},
+    equation::{Equation, EquationDisplay, Port},
+    term::TermPtr,
+    var::VarPtr,
 };
 
-#[repr(u32)]
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum Cell {
-    Ctr(TermPtr, TermPtr),
-    Dup(TermPtr, TermPtr),
-}
-
-impl Display for Cell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Cell::Ctr(_, _) => write!(f, "(Ctr {} {})", 0, 0),
-            Cell::Dup(_, _) => write!(f, "(Dup {} {})", 0, 0),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Var(pub(crate) AtomicU64);
-impl Var {
-    pub fn new(val: u64) -> Self {
-        Var(AtomicU64::new(val))
-    }
-}
-
-#[derive(Debug)]
-pub enum Term {
-    Var(Var),
-    Cell(Cell),
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Equation {
-    Redex {
-        left_ptr: CellPtr,
-        right_ptr: CellPtr,
-    },
-    Bind {
-        var_ptr: VarPtr,
-        cell_ptr: CellPtr,
-    },
-    Connect {
-        left_ptr: VarPtr,
-        right_ptr: VarPtr,
-    },
-}
+use super::store::Store;
 
 #[derive(Debug)]
 pub struct Net {
     pub(crate) head: Vec<VarPtr>,
     pub(crate) body: Vec<Equation>,
-    pub(crate) heap: Heap,
-}
-
-impl From<Var> for Term {
-    fn from(var: Var) -> Self {
-        Term::Var(var)
-    }
-}
-
-impl Cell {
-    pub fn is_ctr(&self) -> bool {
-        match self {
-            Cell::Ctr(_, _) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_dup(&self) -> bool {
-        match self {
-            Cell::Dup(_, _) => true,
-            _ => false,
-        }
-    }
-}
-
-impl From<Cell> for Term {
-    fn from(cell: Cell) -> Self {
-        Term::Cell(cell)
-    }
+    pub(crate) store: Store,
 }
 
 impl Net {
+    pub fn new(capacity: u32) -> Self {
+        Net {
+            head: Default::default(),
+            body: Default::default(),
+            store: Store::new(capacity),
+        }
+    }
+
     pub fn var(&mut self) -> (Port, Port) {
-        let ptr = self.heap.alloc_var();
+        let ptr = self.alloc_var();
         (Port { ptr }, Port { ptr })
     }
 
     pub fn ctr<T1: Into<TermPtr>, T2: Into<TermPtr>>(&mut self, port_0: T1, port_1: T2) -> CellPtr {
-        let ports = Some((port_0, port_1));
-        self.heap.alloc_ctr(ports).into()
+        self.alloc_cell(Cell::Ctr(port_0.into(), port_1.into()).into())
+            .into()
     }
 
     pub fn dup<T1: Into<TermPtr>, T2: Into<TermPtr>>(&mut self, port_0: T1, port_1: T2) -> CellPtr {
-        self.heap.alloc_dup(Some((port_0, port_1)))
+        self.alloc_cell(Cell::Dup(port_0.into(), port_1.into()).into())
+            .into()
     }
 
     pub fn era(&mut self) -> CellPtr {
@@ -141,37 +86,69 @@ impl Net {
         };
         free.0
     }
-}
 
-impl Net {
-    pub fn new(capacity: usize) -> Self {
-        Net {
-            head: Default::default(),
-            body: Default::default(),
-            heap: Heap::new(capacity),
+    //
+    fn alloc_cell(&self, cell: Option<Cell>) -> CellPtr {
+        let term = cell.map(|c| c.into());
+        let cell_ptr = self.store.alloc_cell(term);
+        debug!(
+            "Allocated store[{}]={}",
+            cell_ptr.get_ptr().unwrap().get_index(),
+            self.store.display_cell(&cell_ptr)
+        );
+        cell_ptr
+    }
+
+    fn alloc_var(&self) -> VarPtr {
+        let var_ptr = self.store.alloc_var();
+        debug!("Allocated store[{}]={}", var_ptr.0.get_index(), var_ptr);
+        var_ptr
+    }
+
+    /// Consume the cell identified by the given CellPtr. Note that we consume the cell linearly
+    fn consume_cell(&self, cell_ptr: CellPtr) -> Cell {
+        match cell_ptr {
+            CellPtr::Era => panic!("Cannot get unboxed ERA from store"),
+            CellPtr::Ref(ptr) => {
+                debug!("Consume CELL[{:?}]", ptr);
+                self.store
+                    .consume_cell(ptr)
+                    .expect("Expected cell, found nothing")
+                    .try_into()
+                    .unwrap()
+            }
         }
     }
-}
 
-impl TryFrom<Term> for Var {
-    type Error = Term;
+    // fn read_cell(&self, cell_ptr: &CellPtr) -> (&TermPtr, &TermPtr) {
+    //     match cell_ptr {
+    //         CellPtr::Era => panic!("Cannot get unboxed ERA"),
+    //         CellPtr::Ref(ptr) => match self.store.read_cell(ptr) {
+    //             Some(Term::Var(_)) => panic!("Expected cell, found var"),
+    //             Some(Term::Cell(Cell::Ctr(port_0, port_1)))
+    //             | Some(Term::Cell(Cell::Dup(port_0, port_1))) => (&port_0, &port_1),
+    //             None => panic!("Expected cell, found nothing"),
+    //         },
+    //     }
+    // }
 
-    fn try_from(value: Term) -> Result<Self, Self::Error> {
-        match value {
-            Term::Var(var) => Ok(var),
-            _ => Err(value),
-        }
-    }
-}
+    // pub fn write_cell(&self, cell_ptr: &CellPtr, cell: Cell) {
+    //     match cell_ptr {
+    //         CellPtr::Era => panic!("Cannot set ERA"),
+    //         CellPtr::Ref(ptr) => {
+    //             debug!("Set Cell[{:?}] = {:?}", ptr.index, cell);
+    //             self.store.write_cell(ptr, cell);
+    //         }
+    //     }
+    // }
 
-impl TryFrom<Term> for Cell {
-    type Error = Term;
+    // pub fn write_var(&self, var_ptr: VarPtr, value: CellPtr) -> Option<CellPtr> {
+    //     let VarPtr(ptr) = var_ptr;
+    //     self.store.write_var(&ptr, cell_ptr)
+    // }
 
-    fn try_from(value: Term) -> Result<Self, Self::Error> {
-        match value {
-            Term::Cell(cell) => Ok(cell),
-            _ => Err(value),
-        }
+    pub fn display_equation<'a>(&'a self, eqn: &'a Equation, store: &'a Store) -> EquationDisplay {
+        EquationDisplay(eqn, store)
     }
 }
 
@@ -196,9 +173,9 @@ impl Display for NetBody<'_> {
         let body = &self.0.body;
         let mut body_iter = body.iter();
         if let Some(eqn) = body_iter.next() {
-            write!(f, "{}", EquationDisplay(eqn, &self.0.heap))?;
+            write!(f, "{}", self.0.display_equation(eqn, &self.0.store))?;
             for eqn in body_iter {
-                write!(f, ", {}", EquationDisplay(eqn, &self.0.heap))?;
+                write!(f, ", {}", self.0.display_equation(eqn, &self.0.store))?;
             }
         }
         return Ok(());
@@ -207,25 +184,5 @@ impl Display for NetBody<'_> {
 impl Display for Net {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return write!(f, "≪ {} | {} ≫", NetHead(self), NetBody(self));
-    }
-}
-
-pub struct EquationDisplay<'a>(&'a Equation, &'a Heap);
-
-impl<'a> Display for EquationDisplay<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.0 {
-            Equation::Redex {
-                left_ptr,
-                right_ptr,
-            } => write!(f, "{}", self.1.display_redex(*left_ptr, *right_ptr)),
-            Equation::Bind { var_ptr, cell_ptr } => {
-                write!(f, "{} ↔ {}", var_ptr, self.1.display_cell(*cell_ptr))
-            }
-            Equation::Connect {
-                left_ptr,
-                right_ptr,
-            } => write!(f, "{} ↔ {}", left_ptr, right_ptr),
-        }
     }
 }

@@ -1,7 +1,4 @@
-use crate::icomb::{
-    net::Net,
-    CellPtr, TermPtr, Port,
-};
+use crate::icomb::net::{Net, cell::CellPtr, equation::Port, term::TermPtr};
 
 /// M0 multiplexor
 pub fn m_0(net: &mut Net) -> CellPtr {
