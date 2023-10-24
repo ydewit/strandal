@@ -110,7 +110,7 @@ impl Store {
             self.mem.add(index).write(Some(var.into()));
         }
         self.len.fetch_add(1, Ordering::Relaxed);
-        return VarPtr(Ptr::new(index as u32));
+        return VarPtr::new(index as u32);
     }
 
     pub fn consume_cell(&self, ptr: Ptr<CellPtr>) -> Option<Cell> {
@@ -142,31 +142,6 @@ impl Store {
             None => panic!("Expected var, found nothing at {ptr:?}"),
         }
     }
-
-    // pub fn write_var(&self, ptr: &Ptr<VarPtr>, cell_ptr: CellPtr) -> Option<CellPtr> {
-    //     debug!("Write VAR[{:?}] = {:?}", ptr, cell_ptr);
-    //     match unsafe { self._to_mem(ptr.index).as_ref().unwrap() } {
-    //         Some(Term::Var(var)) => return var.swap(cell_ptr),
-    //         Some(Term::Cell(_)) => panic!("Expected var, found cell"),
-    //         None => panic!("Expected var, found nothing"),
-    //     }
-    // }
-
-    // pub fn write_other_var(&self, var_ptr: VarPtr, other_ptr: VarPtr) {
-    //     let VarPtr(ptr) = var_ptr;
-    //     debug!("Write other VAR[{:?}] = {:?}", ptr.index, other_ptr);
-    //     match unsafe { self._to_mem(ptr.index).as_ref().unwrap() } {
-    //         Some(term) => match term {
-    //             Term::Var(var) => {
-    //                 var.set_other_var(other_ptr);
-    //             }
-    //             Term::Cell(_) => {
-    //                 panic!("Expected var, found cell");
-    //             }
-    //         },
-    //         None => panic!("Expected var, found nothing"),
-    //     }
-    // }
 
     pub fn free_cell(&self, ptr: Ptr<CellPtr>) {
         let item = unsafe { self.mem.add(ptr.index as usize) };

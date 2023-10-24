@@ -101,7 +101,7 @@ impl Net {
 
     fn alloc_var(&self) -> VarPtr {
         let var_ptr = self.store.alloc_var();
-        debug!("Allocated store[{}]={}", var_ptr.0.get_index(), var_ptr);
+        debug!("Allocated store[{}]={}", var_ptr, var_ptr);
         var_ptr
     }
 
@@ -119,33 +119,6 @@ impl Net {
             }
         }
     }
-
-    // fn read_cell(&self, cell_ptr: &CellPtr) -> (&TermPtr, &TermPtr) {
-    //     match cell_ptr {
-    //         CellPtr::Era => panic!("Cannot get unboxed ERA"),
-    //         CellPtr::Ref(ptr) => match self.store.read_cell(ptr) {
-    //             Some(Term::Var(_)) => panic!("Expected cell, found var"),
-    //             Some(Term::Cell(Cell::Ctr(port_0, port_1)))
-    //             | Some(Term::Cell(Cell::Dup(port_0, port_1))) => (&port_0, &port_1),
-    //             None => panic!("Expected cell, found nothing"),
-    //         },
-    //     }
-    // }
-
-    // pub fn write_cell(&self, cell_ptr: &CellPtr, cell: Cell) {
-    //     match cell_ptr {
-    //         CellPtr::Era => panic!("Cannot set ERA"),
-    //         CellPtr::Ref(ptr) => {
-    //             debug!("Set Cell[{:?}] = {:?}", ptr.index, cell);
-    //             self.store.write_cell(ptr, cell);
-    //         }
-    //     }
-    // }
-
-    // pub fn write_var(&self, var_ptr: VarPtr, value: CellPtr) -> Option<CellPtr> {
-    //     let VarPtr(ptr) = var_ptr;
-    //     self.store.write_var(&ptr, cell_ptr)
-    // }
 
     pub fn display_equation<'a>(&'a self, eqn: &'a Equation, store: &'a Store) -> EquationDisplay {
         EquationDisplay(eqn, store)

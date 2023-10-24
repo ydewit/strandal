@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::icomb::store::{Ptr, Store};
+use crate::icomb::store::Store;
 
 use super::{
     cell::{Cell, CellPtr},

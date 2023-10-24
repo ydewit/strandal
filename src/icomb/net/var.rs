@@ -1,3 +1,14 @@
+//! This module contains types and functions related to variables in the I-Combinator.
+//!
+//! A variable is a kind of wire that can serve as a buffer for exchanging a cell or another variable
+//! between evaluation threads. It is the only value in this implementation that is mutable.
+//!
+//! A variable value is represented by a `VarValue`, which is a wrapper around an optional term, i.e.
+//! a cell or another variable.
+//!
+//! Thread-safe mutability is guaranteed by using an `AtomicU64` to store the `VarValue`. And making
+//! sure that all changes are basically atomic swaps. It is the responsibility of the runtime to make
+//! that setting a variable happens in a correct order with respect to other operations.
 use std::{fmt::Display, sync::atomic::AtomicU64};
 
 use crate::icomb::store::Ptr;
@@ -6,6 +17,38 @@ use super::{
     cell::CellPtr,
     term::{Term, TermPtr},
 };
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct VarPtr(pub(crate) Ptr<VarPtr>);
+impl VarPtr {
+    pub fn new(index: u32) -> Self {
+        VarPtr(Ptr::new(index))
+    }
+}
+
+impl From<CellPtr> for TermPtr {
+    fn from(value: CellPtr) -> Self {
+        TermPtr::CellPtr(value)
+    }
+}
+
+impl From<CellPtr> for u64 {
+    fn from(value: CellPtr) -> Self {
+        match value {
+            CellPtr::Ref(ptr) => (ptr.get_index() as u64) << 1 | false as u64,
+            CellPtr::Era => 0,
+        }
+    }
+}
+impl From<Ptr<VarPtr>> for Option<VarPtr> {
+    fn from(value: Ptr<VarPtr>) -> Self {
+        if value.is_nil() {
+            return None;
+        } else {
+            return Some(VarPtr(value));
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 struct VarValue(Option<TermPtr>);
@@ -68,85 +111,6 @@ impl TryFrom<u64> for VarValue {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct VarPtr(pub(crate) Ptr<VarPtr>);
-
-impl From<CellPtr> for TermPtr {
-    fn from(value: CellPtr) -> Self {
-        TermPtr::CellPtr(value)
-    }
-}
-
-impl From<CellPtr> for u64 {
-    fn from(value: CellPtr) -> Self {
-        match value {
-            CellPtr::Ref(ptr) => (ptr.get_index() as u64) << 1 | false as u64,
-            CellPtr::Era => 0,
-        }
-    }
-}
-impl From<Ptr<VarPtr>> for Option<VarPtr> {
-    fn from(value: Ptr<VarPtr>) -> Self {
-        if value.is_nil() {
-            return None;
-        } else {
-            return Some(VarPtr(value));
-        }
-    }
-}
-
-// #[derive(Debug)]
-// pub struct VarState {
-//     pub(crate) linked_var_ptr: Option<VarPtr>,
-//     pub(crate) cell_ptr: Option<CellPtr>,
-// }
-
-// impl VarState {
-//     pub fn new(linked_var_ptr: Option<VarPtr>, cell_ptr: Option<CellPtr>) -> Self {
-//         VarState {
-//             linked_var_ptr,
-//             cell_ptr,
-//         }
-//     }
-// }
-// impl From<u64> for VarState {
-//     fn from(value: u64) -> Self {
-//         let var_ptr_val: Ptr<VarPtr> = Ptr::new((value >> 32) as u32);
-//         let cell_ptr_val: Ptr<CellPtr> = Ptr::new((value & 0xFFFFFFFF) as u32);
-//         return VarState::new(var_ptr_val.into(), cell_ptr_val.into());
-//     }
-// }
-
-// impl From<&VarState> for u64 {
-//     fn from(value: &VarState) -> Self {
-//         let var_ptr_val = value
-//             .linked_var_ptr
-//             .map_or(0, |var_ptr| var_ptr.0.index as u64)
-//             << 32;
-//         let cell_ptr_val = 0xFFFFFFFF
-//             & value.cell_ptr.map_or(0, |cell_ptr| match cell_ptr {
-//                 CellPtr::Era => panic!("Cannot set ERA"),
-//                 CellPtr::Ref(ptr) => ptr.index as u64,
-//             });
-//         return var_ptr_val | cell_ptr_val;
-//     }
-// }
-
-// impl From<VarState> for u64 {
-//     fn from(value: VarState) -> Self {
-//         let var_ptr_val = value
-//             .linked_var_ptr
-//             .map_or(0, |var_ptr| var_ptr.0.index as u64)
-//             << 32;
-//         let cell_ptr_val = 0xFFFFFFFF
-//             & value.cell_ptr.map_or(0, |cell_ptr| match cell_ptr {
-//                 CellPtr::Era => panic!("Cannot set ERA"),
-//                 CellPtr::Ref(ptr) => ptr.index as u64,
-//             });
-//         return var_ptr_val | cell_ptr_val;
-//     }
-// }
-
 /// A variable is mainly a pointer to a cell that initially is empty and it set once.
 /// In addition, a variable may be connected to another variable by setting a pointer
 /// to another variable, otherwise it is disconnected (the common case).
@@ -175,14 +139,6 @@ impl Var {
         }
     }
 
-    /// Before a Var can be updated it has to be read first to make sure we can compare and swap the write
-    ///
-    // #[inline(always)]
-    // pub fn current_state(&self) -> VarState {
-    //     let value = self.value.load(std::sync::atomic::Ordering::Relaxed);
-    //     return value.into();
-    // }
-
     pub fn set(&self, term_ptr: TermPtr) -> Option<TermPtr> {
         let old_var_value = self.value.swap(
             VarValue(Some(term_ptr)).into(),
@@ -190,46 +146,6 @@ impl Var {
         );
         return VarValue::try_from(old_var_value).unwrap().0;
     }
-
-    // /// 1. Get the state for the var with current_state()
-    // /// 2. connect(). If it returns Some(state) then the var was modified betwee the read and this write. None, if successul.
-    // pub fn link(&self, state: &VarState, var_ptr: VarPtr) -> Option<VarState> {
-    //     assert!(
-    //         state.linked_var_ptr.is_none(),
-    //         "Var is already connected to var: {:?}",
-    //         state.linked_var_ptr
-    //     );
-
-    //     match self.value.compare_exchange(
-    //         state.into(),
-    //         VarState::new(Some(var_ptr), state.cell_ptr).into(),
-    //         std::sync::atomic::Ordering::Relaxed,
-    //         std::sync::atomic::Ordering::Relaxed,
-    //     ) {
-    //         Ok(_) => return None,
-    //         Err(current) => Some(current.into()),
-    //     }
-    // }
-
-    // /// 1. Get the state for the var with current_state()
-    // /// 2. bind(). If it returns Some(state) then the var was modified betwee the read and this write. None, if successul.
-    // pub fn bind(&self, state: &VarState, cell_ptr: CellPtr) -> Option<VarState> {
-    //     assert!(
-    //         state.cell_ptr.is_none(),
-    //         "Var is already bound to a CellPtr: {:?}",
-    //         state.cell_ptr
-    //     );
-
-    //     match self.value.compare_exchange(
-    //         state.into(),
-    //         VarState::new(state.linked_var_ptr, Some(cell_ptr)).into(),
-    //         std::sync::atomic::Ordering::Relaxed,
-    //         std::sync::atomic::Ordering::Relaxed,
-    //     ) {
-    //         Ok(_) => return None,
-    //         Err(current) => return Some(current.into()),
-    //     }
-    // }
 }
 
 impl TryFrom<Term> for Var {

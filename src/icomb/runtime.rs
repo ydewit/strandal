@@ -5,14 +5,12 @@ use std::{
 
 use tracing::{debug, info};
 
-use crate::icomb::net::cell;
-
 use super::{
     net::{
         cell::{Cell, CellPtr},
         equation::Equation,
         term::TermPtr,
-        var::{Var, VarPtr},
+        var::VarPtr,
         Net,
     },
     store::Store,
@@ -311,206 +309,6 @@ impl Runtime {
         }
     }
 
-    // fn eval_bind_inner<'scope>(
-    //     &'scope self,
-    //     scope: &rayon::Scope<'scope>,
-    //     store: &'scope Store,
-    //     var_ptr: VarPtr,
-    //     cell_ptr: CellPtr,
-    //     var: &Var,
-    //     mut var_state: VarState,
-    //     first_try: bool,
-    // ) {
-    //     match var.bind(&var_state, cell_ptr) {
-    //         Some(state) => {
-    //             var_state = state;
-    //             if first_try {
-    //                 self.eval_bind_inner(scope, store, var_ptr, cell_ptr, var, var_state, false)
-    //             } else {
-    //                 panic!("Could not bind var")
-    //             }
-    //         }
-    //         None => {
-    //             match var_state.cell_ptr {
-    //                 Some(other_cell_ptr) => {
-    //                     self.spawn_redex(scope, store, cell_ptr, other_cell_ptr);
-    //                     store.free_var(var_ptr); // TODO: only free if bound variable
-    //                 }
-    //                 None => {
-    //                     debug!(
-    //                         "({}) {}[{}]",
-    //                         self.thread_id(),
-    //                         var_ptr,
-    //                         store.display_cell(&cell_ptr)
-    //                     );
-    //                     // var value set! Nothing else to do
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    // fn eval_connect<'scope>(
-    //     &'scope self,
-    //     scope: &rayon::Scope<'scope>,
-    //     store: &'scope Store,
-    //     left_ptr: VarPtr,
-    //     right_ptr: VarPtr,
-    // ) {
-    //     self.inc_connects();
-
-    //     debug!(
-    //         "({}) eval CONNECT: {} ↔ {}",
-    //         self.thread_id(),
-    //         left_ptr,
-    //         right_ptr
-    //     );
-
-    //     // now process vars
-    //     let left_var = store.get_var(&left_ptr);
-    //     let right_var = store.get_var(&right_ptr);
-
-    //     let left_var_state = left_var.current_state();
-    //     let right_var_state = right_var.current_state();
-
-    //     self.eval_connect_inner(
-    //         scope,
-    //         store,
-    //         left_ptr,
-    //         right_ptr,
-    //         left_var,
-    //         right_var,
-    //         left_var_state,
-    //         right_var_state,
-    //         true,
-    //     );
-    // }
-
-    // fn eval_connect_inner<'scope>(
-    //     &'scope self,
-    //     scope: &rayon::Scope<'scope>,
-    //     store: &'scope Store,
-    //     left_ptr: VarPtr,
-    //     right_ptr: VarPtr,
-    //     left_var: &Var,
-    //     right_var: &Var,
-    //     mut left_var_state: VarState,
-    //     mut right_var_state: VarState,
-    //     first_try: bool,
-    // ) {
-    //     if left_ptr == right_ptr {
-    //         // nothing to do
-    //         return;
-    //     }
-
-    //     // First we check whether vars are set
-    //     match (left_var_state.cell_ptr, right_var_state.cell_ptr) {
-    //         // CONN(x[c], y[d]) → REDEX(c,d),FREE(x),FREE(y]
-    //         (Some(left_cell_ptr), Some(right_cell_ptr)) => {
-    //             self.spawn_redex(scope, store, left_cell_ptr, right_cell_ptr);
-    //             store.free_var(left_ptr);
-    //             store.free_var(right_ptr);
-    //         }
-    //         // CONN(x,    y[d]) → BIND(x,d),FREE(y)
-    //         (None, Some(cell_ptr)) => {
-    //             store.free_var(right_ptr);
-    //             self.eval_bind(scope, store, left_ptr, cell_ptr)
-    //         }
-    //         // CONN(x[c], y   ) → BIND(y,c),FREE(x)
-    //         (Some(cell_ptr), None) => {
-    //             store.free_var(left_ptr);
-    //             self.eval_bind(scope, store, right_ptr, cell_ptr)
-    //         }
-    //         // CONN(x,    y   ) → LINK(x,y), LINK(y,x)
-    //         (None, None) => {
-    //             // we are connecting two vars that were not yet set: we need to
-    //             // link them to each other
-    //             match (
-    //                 left_var_state.linked_var_ptr,
-    //                 right_var_state.linked_var_ptr,
-    //             ) {
-    //                 // None of the vars are connected: connect them to each other
-    //                 (None, None) => {
-    //                     // point vars to each other, first!
-    //                     match (
-    //                         left_var.link(&left_var_state, right_ptr),
-    //                         right_var.link(&right_var_state, left_ptr),
-    //                     ) {
-    //                         (None, None) => {
-    //                             // success!
-    //                             debug!(
-    //                                 "({}) Linked {} to {}",
-    //                                 self.thread_id(),
-    //                                 left_ptr,
-    //                                 right_ptr
-    //                             );
-    //                             debug!(
-    //                                 "({}) Linked {} to {}",
-    //                                 self.thread_id(),
-    //                                 right_ptr,
-    //                                 left_ptr
-    //                             );
-    //                             return;
-    //                         }
-    //                         (None, Some(current_state)) => {
-    //                             right_var_state = current_state;
-    //                         }
-    //                         (Some(current_state), None) => {
-    //                             left_var_state = current_state;
-    //                         }
-    //                         (Some(left_state), Some(right_state)) => {
-    //                             left_var_state = left_state;
-    //                             right_var_state = right_state;
-    //                         }
-    //                     };
-
-    //                     if first_try {
-    //                         self.eval_connect_inner(
-    //                             scope,
-    //                             store,
-    //                             left_ptr,
-    //                             right_ptr,
-    //                             left_var,
-    //                             right_var,
-    //                             left_var_state,
-    //                             right_var_state,
-    //                             false,
-    //                         )
-    //                     } else {
-    //                         panic!("Could not link vars")
-    //                     }
-    //                 }
-    //                 // One of the vars is connected
-    //                 (None, Some(right_linked_var_ptr)) => {
-    //                     let right_linked_var = store.get_var(&right_linked_var_ptr);
-    //                     let right_linked_var_state = right_linked_var.current_state();
-    //                     assert!(right_linked_var_state.linked_var_ptr == Some(right_ptr));
-
-    //                     match right_linked_var.link(&right_linked_var_state, left_ptr) {
-    //                         Some(_) => todo!(),
-    //                         None => todo!(),
-    //                     }
-    //                     // match left_var.link(&left_var_state, right_linked_var_ptr) {
-    //                     //     Some(current_state) => {}
-    //                     //     None => todo!(),
-    //                     // }
-
-    //                     store.free_var(right_ptr);
-    //                 }
-    //                 (Some(left_linked_var_ptr), None) => {
-    //                     let left_linked_var = store.get_var(&left_linked_var_ptr);
-    //                     let left_linked_var_state = left_linked_var.current_state();
-    //                     assert!(left_linked_var_state.linked_var_ptr == Some(left_ptr));
-
-    //                     todo!()
-    //                 }
-    //                 // Both of the vars are connected
-    //                 (Some(_), Some(_)) => todo!(),
-    //             }
-    //         }
-    //     }
-    // }
-
     fn eval_connect_walk<'scope>(
         &'scope self,
         scope: &rayon::Scope<'scope>,
@@ -560,7 +358,7 @@ impl Runtime {
                     }
                 };
             }
-            Some(term_ptr @ TermPtr::VarPtr(next_var_ptr)) => {
+            Some(TermPtr::VarPtr(next_var_ptr)) => {
                 // the var was already connected to another var
                 store.free_var(var_ptr);
                 // continue walking to the next var
@@ -592,32 +390,5 @@ impl Runtime {
             Some(left_var_ptr),
             left_var_ptr.into(),
         );
-
-        // // walk right
-        // let right_cell_ptr =
-        //     self.eval_connect_walk(scope, store, right_var_ptr, left_var_ptr.into());
-        // // walk left
-        // let left_cell_ptr = self.eval_connect_walk(scope, store, left_var_ptr, right_var_value);
-
-        // // now process vars
-        // match (left_cell_ptr, right_cell_ptr) {
-        //     (None, None) => {
-        //         // linked
-        //     }
-        //     (None, Some(cell_ptr)) => {
-        //         return self.eval_bind(scope, store, var_ptr, cell_ptr);
-        //     }
-        //     (Some(cell_ptr), None) => {}
-        //     (Some(left_cell_ptr), Some(right_cell_ptr)) => todo!(),
-
-        //     (TermPtr::CellPtr(left_ptr), TermPtr::CellPtr(right_ptr)) => {
-        //         return self.spawn_redex(scope, store, left_ptr, right_ptr);
-        //     }
-        //     (TermPtr::CellPtr(cell_ptr), TermPtr::VarPtr(var_ptr))
-        //     | (TermPtr::VarPtr(var_ptr), TermPtr::CellPtr(cell_ptr)) => {}
-        //     (TermPtr::VarPtr(left_var_ptr), TermPtr::VarPtr(right_var_ptr)) => {
-        //         // nothing to do: walk already connected them and free'ed intermediate vars
-        //     }
-        // }
     }
 }
