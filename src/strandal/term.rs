@@ -4,7 +4,7 @@ use crate::strandal::store::Store;
 
 use super::{
     cell::{Cell, CellPtr},
-    equation::Port,
+    equation::VarPort,
     var::{Var, VarPtr},
 };
 
@@ -26,8 +26,8 @@ impl From<VarPtr> for TermPtr {
     }
 }
 
-impl From<Port> for TermPtr {
-    fn from(value: Port) -> Self {
+impl From<VarPort> for TermPtr {
+    fn from(value: VarPort) -> Self {
         value.ptr.into()
     }
 }

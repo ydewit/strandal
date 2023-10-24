@@ -6,14 +6,12 @@ use std::{
 use tracing::{debug, info};
 
 use super::{
-    net::{
-        cell::{Cell, CellPtr},
-        equation::Equation,
-        term::TermPtr,
-        var::VarPtr,
-        Net,
-    },
+    cell::{Cell, CellPtr},
+    equation::Equation,
+    net::Net,
     store::Store,
+    term::TermPtr,
+    var::VarPtr,
 };
 
 pub struct Runtime {

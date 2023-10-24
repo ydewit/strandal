@@ -7,7 +7,7 @@ use std::{
 use std::alloc::alloc;
 use tracing::debug;
 
-use super::net::{
+use super::{
     cell::{Cell, CellPtr, CellPtrDisplay},
     term::{Term, TermPtr, TermPtrDisplay},
     var::{Var, VarPtr},

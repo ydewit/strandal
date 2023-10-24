@@ -2,10 +2,10 @@ use std::fmt::Display;
 
 use crate::strandal::store::Store;
 
-use super::{cell::CellPtr, term::TermPtr, var::VarPtr};
+use super::{cell::CellPtr, var::VarPtr};
 
-// Linear wire
-pub struct Port {
+#[derive(Debug, Eq, PartialEq)]
+pub struct VarPort {
     pub(crate) ptr: VarPtr,
 }
 

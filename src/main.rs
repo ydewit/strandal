@@ -1,12 +1,15 @@
-mod strandal;
 mod lambda;
+mod strandal;
 
-use strandal::net::Net;
 use lambda::{dup, id};
+use strandal::net::Net;
 
 use tracing::{debug, info};
 
-use crate::{strandal::runtime::Runtime, lambda::m_2};
+use crate::{
+    lambda::m_2,
+    strandal::{net::NetBuilder, runtime::Runtime},
+};
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -16,6 +19,7 @@ fn main() {
     let dup_ptr = dup(&mut net);
     let m2_ptr = m_2(&mut net);
     net.connect(id_ptr, dup_ptr);
+    net.head(m2_ptr.0);
 
     info!("Initial Net: {}", net);
 
