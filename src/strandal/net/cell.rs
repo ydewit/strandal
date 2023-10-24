@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::icomb::store::{Ptr, Store};
+use crate::strandal::store::{Ptr, Store};
 
 use super::term::TermPtr;
 

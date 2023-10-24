@@ -229,7 +229,7 @@ impl<'a> Iterator for StoreIter<'a> {
 // #[cfg(test)]
 // mod tests {
 
-//     use crate::icomb::net::Cell;
+//     use crate::strandal::net::Cell;
 
 //     // add tests to the Store struct here
 //     use super::{CellPtr, Store, Ptr, VarPtr};

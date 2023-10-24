@@ -1,12 +1,12 @@
-mod icomb;
+mod strandal;
 mod lambda;
 
-use icomb::net::Net;
+use strandal::net::Net;
 use lambda::{dup, id};
 
 use tracing::{debug, info};
 
-use crate::{icomb::runtime::Runtime, lambda::m_2};
+use crate::{strandal::runtime::Runtime, lambda::m_2};
 
 fn main() {
     tracing_subscriber::fmt::init();

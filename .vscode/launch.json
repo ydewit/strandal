@@ -8,15 +8,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'icomb'",
+            "name": "Debug executable 'strandal'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=icomb",
-                    "--package=icomb"
+                    "--bin=strandal",
+                    "--package=strandal"
                 ],
                 "filter": {
-                    "name": "icomb",
+                    "name": "strandal",
                     "kind": "bin"
                 }
             },
@@ -30,16 +30,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'icomb'",
+            "name": "Debug unit tests in executable 'strandal'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=icomb",
-                    "--package=icomb"
+                    "--bin=strandal",
+                    "--package=strandal"
                 ],
                 "filter": {
-                    "name": "icomb",
+                    "name": "strandal",
                     "kind": "bin"
                 }
             },

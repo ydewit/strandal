@@ -11,7 +11,7 @@
 //! that setting a variable happens in a correct order with respect to other operations.
 use std::{fmt::Display, sync::atomic::AtomicU64};
 
-use crate::icomb::store::Ptr;
+use crate::strandal::store::Ptr;
 
 use super::{
     cell::CellPtr,
