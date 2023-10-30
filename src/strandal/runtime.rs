@@ -6,12 +6,12 @@ use std::{
 use tracing::{debug, info};
 
 use super::{
-    cell::{Cell, CellPtr},
+    cell::{Cell, CellRef},
     equation::Equation,
     net::Net,
     store::Store,
-    term::TermPtr,
-    var::VarPtr,
+    term::TermRef,
+    var::VarRef,
 };
 
 pub struct Runtime {
@@ -117,14 +117,14 @@ impl Runtime {
     ) {
         match eqn {
             Equation::Redex {
-                left_ptr,
-                right_ptr,
-            } => self.eval_redex(scope, store, left_ptr, right_ptr),
-            Equation::Bind { var_ptr, cell_ptr } => self.eval_bind(scope, store, var_ptr, cell_ptr),
+                left_ref,
+                right_ref,
+            } => self.eval_redex(scope, store, left_ref, right_ref),
+            Equation::Bind { var_ref, cell_ref } => self.eval_bind(scope, store, var_ref, cell_ref),
             Equation::Connect {
-                left_ptr,
-                right_ptr,
-            } => self.eval_connect(scope, store, left_ptr, right_ptr),
+                left_ref,
+                right_ref,
+            } => self.eval_connect(scope, store, left_ref, right_ref),
         }
     }
 
@@ -132,20 +132,20 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        left_term_ptr: TermPtr,
-        right_term_ptr: TermPtr,
+        left_term_ref: TermRef,
+        right_term_ref: TermRef,
     ) {
-        match (left_term_ptr, right_term_ptr) {
-            (TermPtr::CellPtr(left_ptr), TermPtr::CellPtr(right_ptr)) => {
+        match (left_term_ref, right_term_ref) {
+            (TermRef::CellRef(left_ref), TermRef::CellRef(right_ref)) => {
                 // spawn new rewrite thread
-                self.spawn_redex(scope, store, left_ptr, right_ptr);
+                self.spawn_redex(scope, store, left_ref, right_ref);
             }
-            (TermPtr::CellPtr(cell_ptr), TermPtr::VarPtr(var_ptr))
-            | (TermPtr::VarPtr(var_ptr), TermPtr::CellPtr(cell_ptr)) => {
-                self.eval_bind(scope, store, var_ptr, cell_ptr);
+            (TermRef::CellRef(cell_ref), TermRef::VarRef(var_ref))
+            | (TermRef::VarRef(var_ref), TermRef::CellRef(cell_ref)) => {
+                self.eval_bind(scope, store, var_ref, cell_ref);
             }
-            (TermPtr::VarPtr(left_ptr), TermPtr::VarPtr(right_ptr)) => {
-                self.eval_connect(scope, store, left_ptr, right_ptr);
+            (TermRef::VarRef(left_ref), TermRef::VarRef(right_ref)) => {
+                self.eval_connect(scope, store, left_ref, right_ref);
             }
         }
     }
@@ -154,15 +154,15 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        left_term_ptr: TermPtr,
-        right_cell_ptr: CellPtr,
+        left_term_ref: TermRef,
+        right_cell_ref: CellRef,
     ) {
-        match left_term_ptr {
-            TermPtr::CellPtr(left_cell_ptr) => {
+        match left_term_ref {
+            TermRef::CellRef(left_cell_ref) => {
                 // spawn new rewrite thread
-                self.spawn_redex(scope, store, left_cell_ptr, right_cell_ptr);
+                self.spawn_redex(scope, store, left_cell_ref, right_cell_ref);
             }
-            TermPtr::VarPtr(var_ptr) => self.eval_bind(scope, store, var_ptr, right_cell_ptr),
+            TermRef::VarRef(var_ref) => self.eval_bind(scope, store, var_ref, right_cell_ref),
         }
     }
 
@@ -171,49 +171,49 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        left_ptr: CellPtr,
-        right_ptr: CellPtr,
+        left_ref: CellRef,
+        right_ref: CellRef,
     ) {
-        scope.spawn(move |scope| self.eval_redex(scope, store, left_ptr, right_ptr));
+        scope.spawn(move |scope| self.eval_redex(scope, store, left_ref, right_ref));
     }
 
     fn eval_redex<'scope>(
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        left_cell_ptr: CellPtr,
-        right_cell_ptr: CellPtr,
+        left_cell_ref: CellRef,
+        right_cell_ref: CellRef,
     ) {
-        assert!(left_cell_ptr != right_cell_ptr);
+        assert!(left_cell_ref != right_cell_ref);
 
         self.inc_redexes();
 
         debug!(
             "({}) eval REDEX: {}",
             self.thread_id(),
-            store.display_redex(&left_cell_ptr, &right_cell_ptr)
+            store.display_redex(&left_cell_ref, &right_cell_ref)
         );
 
         // eval unboxed ERA
-        match (left_cell_ptr, right_cell_ptr) {
+        match (left_cell_ref, right_cell_ref) {
             // Annihilate: ERA-ERA
-            (CellPtr::Era, CellPtr::Era) => {
+            (CellRef::Era, CellRef::Era) => {
                 // PUFF! Do nothing
                 self.inc_erasures();
 
                 // nothing to free since ptr are unboxed
             }
             // Commute: ERA-DUP / ERA-CTR
-            (CellPtr::Era, CellPtr::Ref(ptr)) | (CellPtr::Ref(ptr), CellPtr::Era) => {
+            (CellRef::Era, CellRef::Ref(ptr)) | (CellRef::Ref(ptr), CellRef::Era) => {
                 // stats
                 self.inc_comm();
 
                 let ctr = store.consume_cell(ptr).unwrap();
                 let ctr_ports = ctr.ports();
-                self.reduce_equation(scope, store, CellPtr::Era.into(), *ctr_ports.0);
-                self.reduce_equation(scope, store, CellPtr::Era.into(), *ctr_ports.1);
+                self.reduce_equation(scope, store, CellRef::Era.into(), *ctr_ports.0);
+                self.reduce_equation(scope, store, CellRef::Era.into(), *ctr_ports.1);
             }
-            (CellPtr::Ref(left_ptr), CellPtr::Ref(right_ptr)) => {
+            (CellRef::Ref(left_ptr), CellRef::Ref(right_ptr)) => {
                 let left_cell = store.consume_cell(left_ptr).unwrap();
                 let right_cell = store.consume_cell(right_ptr).unwrap();
                 match (left_cell, right_cell) {
@@ -237,25 +237,25 @@ impl Runtime {
                     | (Cell::Dup(dup_port_0, dup_port_1), Cell::Ctr(ctr_port_0, ctr_port_1)) => {
                         self.inc_comm();
 
-                        let var_ptr_1 = store.alloc_var();
-                        let var_ptr_2 = store.alloc_var();
-                        let var_ptr_3 = store.alloc_var();
-                        let var_ptr_4 = store.alloc_var();
+                        let var_ref_1 = store.alloc_var();
+                        let var_ref_2 = store.alloc_var();
+                        let var_ref_3 = store.alloc_var();
+                        let var_ref_4 = store.alloc_var();
 
-                        let ctr_ptr = left_cell_ptr; // reuse
-                        let dup_ptr = right_cell_ptr; // reuse
-                        let ctr_ptr_2 =
-                            store.alloc_cell(Cell::Ctr(var_ptr_3.into(), var_ptr_4.into()).into());
-                        let dup_ptr_2 =
-                            store.alloc_cell(Cell::Dup(var_ptr_3.into(), var_ptr_4.into()).into());
+                        let ctr_ref = left_cell_ref; // reuse
+                        let dup_ref = right_cell_ref; // reuse
+                        let ctr_ref_2 =
+                            store.alloc_cell(Cell::Ctr(var_ref_3.into(), var_ref_4.into()).into());
+                        let dup_ref_2 =
+                            store.alloc_cell(Cell::Dup(var_ref_3.into(), var_ref_4.into()).into());
 
-                        store.write_cell(&left_ptr, Cell::Ctr(var_ptr_1.into(), var_ptr_2.into())); // NOTE: ctr_ptr is reused here!
-                        store.write_cell(&right_ptr, Cell::Dup(var_ptr_1.into(), var_ptr_2.into())); // NOTE: dup_ctr is reused here!
+                        store.write_cell(&left_ptr, Cell::Ctr(var_ref_1.into(), var_ref_2.into())); // NOTE: ctr_ref is reused here!
+                        store.write_cell(&right_ptr, Cell::Dup(var_ref_1.into(), var_ref_2.into())); // NOTE: dup_ctr is reused here!
 
-                        self.eval_equation_for_cell(scope, store, ctr_port_0, dup_ptr);
-                        self.reduce_equation(scope, store, ctr_port_1, dup_ptr_2.into());
-                        self.eval_equation_for_cell(scope, store, dup_port_0, ctr_ptr);
-                        self.reduce_equation(scope, store, dup_port_1, ctr_ptr_2.into());
+                        self.eval_equation_for_cell(scope, store, ctr_port_0, dup_ref);
+                        self.reduce_equation(scope, store, ctr_port_1, dup_ref_2.into());
+                        self.eval_equation_for_cell(scope, store, dup_port_0, ctr_ref);
+                        self.reduce_equation(scope, store, dup_port_1, ctr_ref_2.into());
                     }
                 }
                 // TODO reuse?
@@ -269,36 +269,36 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        var_ptr: VarPtr,
-        cell_ptr: CellPtr,
+        var_ref: VarRef,
+        cell_ref: CellRef,
     ) {
         self.inc_binds();
         debug!(
             "({}) eval BIND: {}",
             self.thread_id(),
-            store.display_bind(&var_ptr, &cell_ptr)
+            store.display_bind(&var_ref, &cell_ref)
         );
 
-        self.eval_bind_walk(scope, store, var_ptr, cell_ptr);
+        self.eval_bind_walk(scope, store, var_ref, cell_ref);
     }
 
     fn eval_bind_walk<'scope>(
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        var_ptr: VarPtr,
-        cell_ptr: CellPtr,
+        var_ref: VarRef,
+        cell_ref: CellRef,
     ) {
-        let var = store.get_var(&var_ptr);
-        match var.set(cell_ptr.into()) {
+        let var = store.get_var(&var_ref);
+        match var.set(cell_ref.into()) {
             // walk to next var
-            Some(TermPtr::VarPtr(other_var_ptr)) => {
-                store.free_var(var_ptr);
-                self.eval_bind_walk(scope, store, other_var_ptr, cell_ptr);
+            Some(TermRef::VarRef(other_var_ref)) => {
+                store.free_var(var_ref);
+                self.eval_bind_walk(scope, store, other_var_ref, cell_ref);
             }
             // spawn redex
-            Some(TermPtr::CellPtr(other_cell_ptr)) => {
-                self.eval_redex(scope, store, cell_ptr, other_cell_ptr);
+            Some(TermRef::CellRef(other_cell_ref)) => {
+                self.eval_redex(scope, store, cell_ref, other_cell_ref);
             }
             // set done
             None => {
@@ -311,43 +311,43 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        var_ptr: VarPtr,
-        other_var_ptr: Option<VarPtr>,
-        var_value: TermPtr,
+        var_ref: VarRef,
+        other_var_ref: Option<VarRef>,
+        var_value: TermRef,
     ) {
-        let var = store.get_var(&var_ptr);
+        let var = store.get_var(&var_ref);
         match var.set(var_value) {
             None => {
                 // the var was unset and it is not set. This walk is done
             }
-            Some(term_ptr @ TermPtr::CellPtr(_)) => {
-                store.free_var(var_ptr);
-                // Now we walk to the other_var_ptr to set it
-                match other_var_ptr {
-                    Some(other_var_ptr) => {
-                        self.eval_connect_walk(scope, store, other_var_ptr, None, term_ptr)
+            Some(term_ref @ TermRef::CellRef(_)) => {
+                store.free_var(var_ref);
+                // Now we walk to the other_var_ref to set it
+                match other_var_ref {
+                    Some(other_var_ref) => {
+                        self.eval_connect_walk(scope, store, other_var_ref, None, term_ref)
                     }
                     None => {
-                        match (var_value, term_ptr) {
-                            (TermPtr::CellPtr(left_ptr), TermPtr::CellPtr(right_ptr)) => {
+                        match (var_value, term_ref) {
+                            (TermRef::CellRef(left_ref), TermRef::CellRef(right_ref)) => {
                                 // found a redex to spawn
-                                self.spawn_redex(scope, store, left_ptr, right_ptr);
+                                self.spawn_redex(scope, store, left_ref, right_ref);
                             }
-                            (TermPtr::CellPtr(cell_ptr), TermPtr::VarPtr(var_ptr))
-                            | (TermPtr::VarPtr(var_ptr), TermPtr::CellPtr(cell_ptr)) => {
+                            (TermRef::CellRef(cell_ref), TermRef::VarRef(var_ref))
+                            | (TermRef::VarRef(var_ref), TermRef::CellRef(cell_ref)) => {
                                 // found a bind, evaluate it
-                                self.eval_bind(scope, store, var_ptr, cell_ptr)
+                                self.eval_bind(scope, store, var_ref, cell_ref)
                             }
                             (
-                                left_value @ TermPtr::VarPtr(left_ptr),
-                                TermPtr::VarPtr(right_ptr),
+                                left_value @ TermRef::VarRef(left_ref),
+                                TermRef::VarRef(right_ref),
                             ) => {
                                 // found two vars again? Start walking again
                                 self.eval_connect_walk(
                                     scope,
                                     store,
-                                    right_ptr,
-                                    Some(left_ptr),
+                                    right_ref,
+                                    Some(left_ref),
                                     left_value,
                                 );
                             }
@@ -356,11 +356,11 @@ impl Runtime {
                     }
                 };
             }
-            Some(TermPtr::VarPtr(next_var_ptr)) => {
+            Some(TermRef::VarRef(next_var_ref)) => {
                 // the var was already connected to another var
-                store.free_var(var_ptr);
+                store.free_var(var_ref);
                 // continue walking to the next var
-                self.eval_connect_walk(scope, store, next_var_ptr, other_var_ptr, var_value)
+                self.eval_connect_walk(scope, store, next_var_ref, other_var_ref, var_value)
             }
         }
     }
@@ -369,24 +369,24 @@ impl Runtime {
         &'scope self,
         scope: &rayon::Scope<'scope>,
         store: &'scope Store,
-        left_var_ptr: VarPtr,
-        right_var_ptr: VarPtr,
+        left_var_ref: VarRef,
+        right_var_ref: VarRef,
     ) {
         self.inc_connects();
 
         debug!(
             "({}) eval CONNECT: {} ↔ {}",
             self.thread_id(),
-            left_var_ptr,
-            right_var_ptr
+            left_var_ref,
+            right_var_ref
         );
 
         self.eval_connect_walk(
             scope,
             store,
-            right_var_ptr,
-            Some(left_var_ptr),
-            left_var_ptr.into(),
+            right_var_ref,
+            Some(left_var_ref),
+            left_var_ref.into(),
         );
     }
 }

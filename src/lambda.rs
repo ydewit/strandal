@@ -1,7 +1,7 @@
-use crate::strandal::{cell::CellPtr, equation::VarPort, net::NetBuilder, term::TermPtr};
+use crate::strandal::{cell::CellRef, equation::VarPort, net::NetBuilder, term::TermRef};
 
 /// M0 multiplexor
-pub fn m_0(net: &mut impl NetBuilder) -> CellPtr {
+pub fn m_0(net: &mut impl NetBuilder) -> CellRef {
     let era = net.era();
     return era;
 }
@@ -12,7 +12,7 @@ pub fn m_1(net: &mut impl NetBuilder) -> (VarPort, VarPort) {
     return (root, x0);
 }
 
-pub fn m_2(net: &mut impl NetBuilder) -> (TermPtr, [VarPort; 2]) {
+pub fn m_2(net: &mut impl NetBuilder) -> (TermRef, [VarPort; 2]) {
     let aux_0 = net.var();
     let aux_1 = net.var();
     let ctr = net.ctr(aux_0.0, aux_1.0);
@@ -21,7 +21,7 @@ pub fn m_2(net: &mut impl NetBuilder) -> (TermPtr, [VarPort; 2]) {
     return (root.into(), [aux_0.1, aux_1.1]);
 }
 
-pub fn m_3(net: &mut impl NetBuilder) -> (TermPtr, [VarPort; 3]) {
+pub fn m_3(net: &mut impl NetBuilder) -> (TermRef, [VarPort; 3]) {
     let (root, [aux_0, aux_1]) = m_2(net);
     let new_aux_1 = net.var();
     let aux_2 = net.var();
@@ -42,11 +42,11 @@ pub fn dup(b: &mut impl NetBuilder) -> VarPort {
     let var1 = b.var();
     let var2 = b.var();
 
-    let app_ptr = b.ctr(var2.0, var1.0);
-    let dup_ptr = b.dup(var2.1, app_ptr);
-    let lam_ptr = b.ctr(dup_ptr, var1.1);
+    let app_ref = b.ctr(var2.0, var1.0);
+    let dup_ref = b.dup(var2.1, app_ref);
+    let lam_ref = b.ctr(dup_ref, var1.1);
 
     let result = b.var();
-    b.bind(result.0, lam_ptr);
+    b.bind(result.0, lam_ref);
     return result.1;
 }

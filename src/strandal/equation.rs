@@ -2,26 +2,26 @@ use std::fmt::Display;
 
 use crate::strandal::store::Store;
 
-use super::{cell::CellPtr, var::VarPtr};
+use super::{cell::CellRef, var::VarRef};
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct VarPort {
-    pub(crate) ptr: VarPtr,
+    pub(crate) ptr: VarRef,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Equation {
     Redex {
-        left_ptr: CellPtr,
-        right_ptr: CellPtr,
+        left_ref: CellRef,
+        right_ref: CellRef,
     },
     Bind {
-        var_ptr: VarPtr,
-        cell_ptr: CellPtr,
+        var_ref: VarRef,
+        cell_ref: CellRef,
     },
     Connect {
-        left_ptr: VarPtr,
-        right_ptr: VarPtr,
+        left_ref: VarRef,
+        right_ref: VarRef,
     },
 }
 
@@ -31,16 +31,16 @@ impl<'a> Display for EquationDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.0 {
             Equation::Redex {
-                left_ptr,
-                right_ptr,
-            } => write!(f, "{}", self.1.display_redex(left_ptr, right_ptr)),
-            Equation::Bind { var_ptr, cell_ptr } => {
-                write!(f, "{} ↔ {}", var_ptr, self.1.display_cell(cell_ptr))
+                left_ref,
+                right_ref,
+            } => write!(f, "{}", self.1.display_redex(left_ref, right_ref)),
+            Equation::Bind { var_ref, cell_ref } => {
+                write!(f, "{} ↔ {}", var_ref, self.1.display_cell(cell_ref))
             }
             Equation::Connect {
-                left_ptr,
-                right_ptr,
-            } => write!(f, "{} ↔ {}", left_ptr, right_ptr),
+                left_ref,
+                right_ref,
+            } => write!(f, "{} ↔ {}", left_ref, right_ref),
         }
     }
 }

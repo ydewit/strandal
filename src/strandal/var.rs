@@ -14,68 +14,68 @@ use std::{fmt::Display, sync::atomic::AtomicU64};
 use crate::strandal::store::Ptr;
 
 use super::{
-    cell::CellPtr,
-    term::{Term, TermPtr},
+    cell::CellRef,
+    term::{Term, TermRef},
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct VarPtr(pub(crate) Ptr<VarPtr>);
-impl VarPtr {
+pub struct VarRef(pub(crate) Ptr<VarRef>);
+impl VarRef {
     pub fn new(index: u32) -> Self {
-        VarPtr(Ptr::new(index))
+        VarRef(Ptr::new(index))
     }
 }
 
-impl From<CellPtr> for TermPtr {
-    fn from(value: CellPtr) -> Self {
-        TermPtr::CellPtr(value)
+impl From<CellRef> for TermRef {
+    fn from(value: CellRef) -> Self {
+        TermRef::CellRef(value)
     }
 }
 
-impl From<CellPtr> for u64 {
-    fn from(value: CellPtr) -> Self {
+impl From<CellRef> for u64 {
+    fn from(value: CellRef) -> Self {
         match value {
-            CellPtr::Ref(ptr) => (ptr.get_index() as u64) << 1 | false as u64,
-            CellPtr::Era => 0,
+            CellRef::Ref(ptr) => (ptr.get_index() as u64) << 1 | false as u64,
+            CellRef::Era => 0,
         }
     }
 }
-impl From<Ptr<VarPtr>> for Option<VarPtr> {
-    fn from(value: Ptr<VarPtr>) -> Self {
+impl From<Ptr<VarRef>> for Option<VarRef> {
+    fn from(value: Ptr<VarRef>) -> Self {
         if value.is_nil() {
             return None;
         } else {
-            return Some(VarPtr(value));
+            return Some(VarRef(value));
         }
     }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-struct VarValue(Option<TermPtr>);
+struct VarValue(Option<TermRef>);
 
 impl From<VarValue> for u64 {
-    fn from(maybe_term_ptr: VarValue) -> Self {
-        match maybe_term_ptr.0 {
+    fn from(maybe_term_ref: VarValue) -> Self {
+        match maybe_term_ref.0 {
             None => {
                 return 0x0 << 63;
             }
-            Some(term_ptr) => {
+            Some(term_ref) => {
                 let mut value: u64 = 0x1 << 63;
-                match term_ptr {
-                    TermPtr::CellPtr(cell_ptr) => {
+                match term_ref {
+                    TermRef::CellRef(cell_ref) => {
                         value |= 0x0 << 62;
-                        match cell_ptr {
-                            CellPtr::Ref(ptr) => {
+                        match cell_ref {
+                            CellRef::Ref(ptr) => {
                                 return value | 0x0 << 61 | (ptr.get_index() as u64);
                             }
-                            CellPtr::Era => {
+                            CellRef::Era => {
                                 return value | 0x1 << 61;
                             }
                         }
                     }
-                    TermPtr::VarPtr(var_ptr) => {
+                    TermRef::VarRef(var_ref) => {
                         value |= 0x1 << 62;
-                        return value | (var_ptr.0.get_index() as u64);
+                        return value | (var_ref.0.get_index() as u64);
                     }
                 }
             }
@@ -92,18 +92,18 @@ impl TryFrom<u64> for VarValue {
         } else {
             // Some(..)
             if value >> 62 & 0x1 == 0 {
-                // CellPtr
+                // CellRef
                 if value >> 61 & 0x1 == 0 {
-                    Ok(VarValue(Some(TermPtr::CellPtr(CellPtr::Ref(Ptr::new(
+                    Ok(VarValue(Some(TermRef::CellRef(CellRef::Ref(Ptr::new(
                         (value & 0xFFFFFFFF) as u32,
                     ))))))
                 } else {
                     // Era
-                    Ok(VarValue(Some(TermPtr::CellPtr(CellPtr::Era))))
+                    Ok(VarValue(Some(TermRef::CellRef(CellRef::Era))))
                 }
             } else {
-                // VarPtr
-                Ok(VarValue(Some(TermPtr::VarPtr(VarPtr(Ptr::new(
+                // VarRef
+                Ok(VarValue(Some(TermRef::VarRef(VarRef(Ptr::new(
                     (value & 0xFFFFFFFF) as u32,
                 ))))))
             }
@@ -118,8 +118,8 @@ impl TryFrom<u64> for VarValue {
 /// A Var can be in one of four states:
 /// 1. Unset & Disconnected: this is the initial state when the Var is created
 /// 2. Connected & Unset: this is when the Equation::Connect thread connects the Var to another Var
-/// 3. Disconnected & Set: this is when the Equation::Bind thread sets the Var to a CellPtr (this is a final state)
-/// 4. Connected & Set: when the var is connected to another var and the other var is set to a CellPtr (this is also a final state)
+/// 3. Disconnected & Set: this is when the Equation::Bind thread sets the Var to a CellRef (this is a final state)
+/// 4. Connected & Set: when the var is connected to another var and the other var is set to a CellRef (this is also a final state)
 ///
 /// Note that the final Var state must always be set. It may or may not be connected depending on whether there is an Equation::Connect.
 ///
@@ -130,7 +130,7 @@ impl TryFrom<u64> for VarValue {
 ///
 #[derive(Debug)]
 pub struct Var {
-    value: AtomicU64, // linked_var_ptr (u32) + cell_ptr (u32)
+    value: AtomicU64, // linked_var_ref (u32) + cell_ref (u32)
 }
 impl Var {
     pub fn new() -> Self {
@@ -139,9 +139,9 @@ impl Var {
         }
     }
 
-    pub fn set(&self, term_ptr: TermPtr) -> Option<TermPtr> {
+    pub fn set(&self, term_ref: TermRef) -> Option<TermRef> {
         let old_var_value = self.value.swap(
-            VarValue(Some(term_ptr)).into(),
+            VarValue(Some(term_ref)).into(),
             std::sync::atomic::Ordering::Relaxed,
         );
         return VarValue::try_from(old_var_value).unwrap().0;
@@ -159,7 +159,7 @@ impl TryFrom<Term> for Var {
     }
 }
 
-impl Display for VarPtr {
+impl Display for VarRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "x.{}", self.0.get_index())
     }
@@ -170,21 +170,21 @@ mod tests {
 
     #[test]
     fn test_var_value_cell_ref() {
-        let var_value = VarValue(Some(TermPtr::CellPtr(CellPtr::Ref(Ptr::new(1)))));
+        let var_value = VarValue(Some(TermRef::CellRef(CellRef::Ref(Ptr::new(1)))));
         let value = u64::from(var_value);
         assert_eq!(VarValue::try_from(value).unwrap(), var_value);
     }
 
     #[test]
     fn test_var_value_cell_era() {
-        let var_value = VarValue(Some(TermPtr::CellPtr(CellPtr::Era)));
+        let var_value = VarValue(Some(TermRef::CellRef(CellRef::Era)));
         let value = u64::from(var_value);
         assert_eq!(VarValue::try_from(value).unwrap(), var_value);
     }
 
     #[test]
-    fn test_var_value_var_ptr() {
-        let var_value = VarValue(Some(TermPtr::VarPtr(VarPtr(Ptr::new(1)))));
+    fn test_var_value_var_ref() {
+        let var_value = VarValue(Some(TermRef::VarRef(VarRef(Ptr::new(1)))));
         let value = u64::from(var_value);
         assert_eq!(VarValue::try_from(value).unwrap(), var_value);
     }

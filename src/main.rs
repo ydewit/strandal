@@ -15,11 +15,11 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     let mut net = Net::new(1 << 30);
-    let id_ptr = id(&mut net);
-    let dup_ptr = dup(&mut net);
-    let m2_ptr = m_2(&mut net);
-    net.connect(id_ptr, dup_ptr);
-    net.head(m2_ptr.0);
+    let id = id(&mut net);
+    let dup = dup(&mut net);
+    let m2 = m_2(&mut net);
+    net.connect(id, dup);
+    net.head(m2.0);
 
     info!("Initial Net: {}", net);
 

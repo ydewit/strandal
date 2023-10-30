@@ -3,15 +3,15 @@ use std::fmt::Display;
 use crate::strandal::store::Store;
 
 use super::{
-    cell::{Cell, CellPtr},
+    cell::{Cell, CellRef},
     equation::VarPort,
-    var::{Var, VarPtr},
+    var::{Var, VarRef},
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum TermPtr {
-    CellPtr(CellPtr),
-    VarPtr(VarPtr),
+pub enum TermRef {
+    CellRef(CellRef),
+    VarRef(VarRef),
 }
 
 #[derive(Debug)]
@@ -20,13 +20,13 @@ pub enum Term {
     Cell(Cell),
 }
 
-impl From<VarPtr> for TermPtr {
-    fn from(value: VarPtr) -> Self {
-        TermPtr::VarPtr(value)
+impl From<VarRef> for TermRef {
+    fn from(value: VarRef) -> Self {
+        TermRef::VarRef(value)
     }
 }
 
-impl From<VarPort> for TermPtr {
+impl From<VarPort> for TermRef {
     fn from(value: VarPort) -> Self {
         value.ptr.into()
     }
@@ -44,17 +44,17 @@ impl From<Var> for Term {
     }
 }
 
-pub struct TermPtrDisplay<'a> {
-    pub(crate) term_ptr: &'a TermPtr,
+pub struct TermRefDisplay<'a> {
+    pub(crate) term_ref: &'a TermRef,
     pub(crate) store: &'a Store,
 }
-impl<'a> Display for TermPtrDisplay<'a> {
+impl<'a> Display for TermRefDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.term_ptr {
-            TermPtr::CellPtr(cell_ptr) => {
-                write!(f, "{}", self.store.display_cell(cell_ptr),)
+        match self.term_ref {
+            TermRef::CellRef(cell_ref) => {
+                write!(f, "{}", self.store.display_cell(cell_ref),)
             }
-            TermPtr::VarPtr(var_ptr) => write!(f, "{}", var_ptr),
+            TermRef::VarRef(var_ref) => write!(f, "{}", var_ref),
         }
     }
 }

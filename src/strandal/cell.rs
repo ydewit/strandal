@@ -2,19 +2,19 @@ use std::fmt::Display;
 
 use crate::strandal::store::{Ptr, Store};
 
-use super::term::TermPtr;
+use super::term::TermRef;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum CellPtr {
+pub enum CellRef {
     Era,
-    Ref(Ptr<CellPtr>),
+    Ref(Ptr<CellRef>),
 }
-impl CellPtr {
+impl CellRef {
     #[inline]
-    pub fn get_ptr(&self) -> Option<&Ptr<CellPtr>> {
+    pub fn get_ref(&self) -> Option<&Ptr<CellRef>> {
         match self {
-            CellPtr::Era => None,
-            CellPtr::Ref(ptr) => Some(ptr),
+            CellRef::Era => None,
+            CellRef::Ref(ptr) => Some(ptr),
         }
     }
 }
@@ -22,12 +22,12 @@ impl CellPtr {
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Cell {
-    Ctr(TermPtr, TermPtr),
-    Dup(TermPtr, TermPtr),
+    Ctr(TermRef, TermRef),
+    Dup(TermRef, TermRef),
 }
 
 impl Cell {
-    pub fn ports(&self) -> (&TermPtr, &TermPtr) {
+    pub fn ports(&self) -> (&TermRef, &TermRef) {
         match self {
             Cell::Ctr(port_0, port_1) => (port_0, port_1),
             Cell::Dup(port_0, port_1) => (port_0, port_1),
@@ -35,20 +35,20 @@ impl Cell {
     }
 }
 
-// impl TryFrom<u32> for CellPtr {
+// impl TryFrom<u32> for CellRef {
 //     type Error = u32;
 
 //     fn try_from(index: u32) -> Result<Self, Self::Error> {
-//         Ok(CellPtr::Ref(Ptr::new(index)))
+//         Ok(CellRef::Ref(Ptr::new(index)))
 //     }
 // }
 
-// impl From<Ptr<CellPtr>> for Option<CellPtr> {
-//     fn from(value: Ptr<CellPtr>) -> Self {
+// impl From<Ptr<CellRef>> for Option<CellRef> {
+//     fn from(value: Ptr<CellRef>) -> Self {
 //         if value.is_nil() {
 //             return None;
 //         } else {
-//             return Some(CellPtr::Ref(value));
+//             return Some(CellRef::Ref(value));
 //         }
 //     }
 // }
@@ -73,15 +73,15 @@ impl Cell {
 //     }
 // }
 
-pub struct CellPtrDisplay<'a> {
-    pub(crate) cell_ptr: &'a CellPtr,
+pub struct CellRefDisplay<'a> {
+    pub(crate) cell_ref: &'a CellRef,
     pub(crate) store: &'a Store,
 }
-impl<'a> Display for CellPtrDisplay<'a> {
+impl<'a> Display for CellRefDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.cell_ptr {
-            CellPtr::Era => write!(f, "*"),
-            CellPtr::Ref(ptr) => {
+        match self.cell_ref {
+            CellRef::Era => write!(f, "*"),
+            CellRef::Ref(ptr) => {
                 let ports = self.store.read_cell(ptr).unwrap().ports();
                 return write!(
                     f,
