@@ -119,7 +119,7 @@ impl Runtime {
         stats.inc_connects();
 
         debug!(
-            "({:02}) eval CONNECT : {} <-> {}",
+            "({:02}) eval CONNECT : {} ↔ {}",
             self.thread_id(),
             VarDisplay(left_ptr, left),
             VarDisplay(right_ptr, right)
@@ -217,7 +217,7 @@ impl Runtime {
         stats.inc_binds();
 
         debug!(
-            "({:02}) eval BIND    : {} <- {}",
+            "({:02}) eval BIND    : {} ← {}",
             self.thread_id(),
             VarDisplay(var_ptr, var),
             CellDisplay::ERA_SYMBOL
@@ -258,7 +258,7 @@ impl Runtime {
         stats.inc_binds();
 
         debug!(
-            "({:02}) eval BIND    : {} <- {}",
+            "({:02}) eval BIND    : {} ← {}",
             self.thread_id(),
             VarDisplay(var_ptr, var),
             CellDisplay(store, cell_ptr, &cell)
@@ -610,7 +610,7 @@ impl Runtime {
         stats.inc_anni_lam_lam();
 
         debug!(
-            "({:02}) anni LAM-LAM : {} >< {}",
+            "({:02}) anni LAM-LAM : {} ⋈ {}",
             self.thread_id(),
             CellDisplay(store, left_ptr, &Cell::Lam(left_ports)),
             CellDisplay(store, right_ptr, &Cell::Lam(right_ports)),
@@ -635,7 +635,7 @@ impl Runtime {
         stats.inc_anni_app_app();
 
         debug!(
-            "({:02}) anni APP-APP : {} >< {}",
+            "({:02}) anni APP-APP : {} ⋈ {}",
             self.thread_id(),
             CellDisplay::LAM_SYMBOL,
             CellDisplay::LAM_SYMBOL
@@ -712,16 +712,16 @@ impl Runtime {
         right_ptr.map(|ptr| free_ptrs.push(ptr));
 
         debug!(
-            "({:02}) anni DUP-DUP : {} >< {}",
+            "({:02}) anni DUP-DUP : {} ⋈ {}",
             self.thread_id(),
             CellDisplay(store, left_ptr, &Cell::Dup(None, left_lbl)),
             CellDisplay(store, right_ptr, &Cell::Dup(None, right_lbl))
         );
 
         match (left_ports, right_ports) {
-            // Disconnected NET: (Dup a a ?) >< (Dup b b ?)
+            // Disconnected NET: (Dup a a ?) ⋈ (Dup b b ?)
             (None, None) => {}
-            // (Dup a a ?) >< (Dup b c ?)
+            // (Dup a a ?) ⋈ (Dup b c ?)
             (Some((p0, p1)), None) | (None, Some((p0, p1))) => {
                 self.eval_equation(scope, store, p0, p1, free_ptrs, stats);
             }
@@ -756,16 +756,16 @@ impl Runtime {
         right_ptr.map(|ptr| free_ptrs.push(ptr));
 
         debug!(
-            "({:02}) comm DUP-DUP : {} >< {}",
+            "({:02}) comm DUP-DUP : {} ⋈ {}",
             self.thread_id(),
             CellDisplay(store, left_ptr, &Cell::Dup(None, left_lbl)),
             CellDisplay(store, right_ptr, &Cell::Dup(None, right_lbl))
         );
 
         match (left_ports, right_ports) {
-            // Disconnected NET: (Dup a a ?) >< (Dup b b ?)
+            // Disconnected NET: (Dup a a ?) ⋈ (Dup b b ?)
             (None, None) => {}
-            // (Dup a a ?) >< (Dup b c ?)
+            // (Dup a a ?) ⋈ (Dup b c ?)
             (Some((_p0, _p1)), None) | (None, Some((_p0, _p1))) => {
                 // COMMUTE
                 todo!("comm dup-dup not yet implemented")
@@ -792,7 +792,7 @@ impl Runtime {
         app_ptr.map(|ptr| free_ptrs.push(ptr));
 
         debug!(
-            "({:02}) comm ERA-DUP : {} >< {}",
+            "({:02}) comm ERA-DUP : {} ⋈ {}",
             self.thread_id(),
             CellDisplay::ERA_SYMBOL,
             CellDisplay(store, app_ptr, &Cell::App(app_ports))
@@ -825,7 +825,7 @@ impl Runtime {
         lam_ptr.map(|ptr| free_ptrs.push(ptr));
 
         debug!(
-            "({:02}) comm ERA-LAM : {} >< {}",
+            "({:02}) comm ERA-LAM : {} ⋈ {}",
             self.thread_id(),
             CellDisplay::ERA_SYMBOL,
             CellDisplay(store, lam_ptr, &Cell::Lam(lam_ports))
@@ -858,7 +858,7 @@ impl Runtime {
         dup_ptr.map(|ptr| free_ptrs.push(ptr));
 
         debug!(
-            "({:02}) comm ERA-DUP : {} >< {}",
+            "({:02}) comm ERA-DUP : {} ⋈ {}",
             self.thread_id(),
             CellDisplay::ERA_SYMBOL,
             CellDisplay(store, dup_ptr, &Cell::Dup(dup_ports, dup_lbl))
@@ -892,7 +892,7 @@ impl Runtime {
         app_ptr.map(|ptr| free_ptrs.push(ptr));
 
         debug!(
-            "({:02}) comm APP-LAM : {} >< {}",
+            "({:02}) comm APP-LAM : {} ⋈ {}",
             self.thread_id(),
             CellDisplay(store, app_ptr, &Cell::App(app_ports)),
             CellDisplay(store, lam_ptr, &Cell::Lam(lam_ports))
@@ -933,7 +933,7 @@ impl Runtime {
         stats.inc_comm_app_dup();
 
         debug!(
-            "({:02}) comm APP-DUP : {} >< {}",
+            "({:02}) comm APP-DUP : {} ⋈ {}",
             self.thread_id(),
             CellDisplay(store, app_ptr, &Cell::App(app_ports)),
             CellDisplay(store, dup_ptr, &Cell::Dup(dup_ports, dup_lbl))
@@ -971,7 +971,7 @@ impl Runtime {
         stats.inc_comm_lam_dup();
 
         debug!(
-            "({:02}) comm LAM-DUP : {} >< {}",
+            "({:02}) comm LAM-DUP : {} ⋈ {}",
             self.thread_id(),
             CellDisplay(store, lam_ptr, &Cell::Lam(lam_ports)),
             CellDisplay(store, dup_ptr, &Cell::Dup(dup_ports, dup_lbl))
