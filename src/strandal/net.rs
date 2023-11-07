@@ -1,192 +1,138 @@
-use super::store::Store;
-use std::fmt::Display;
-use tracing::debug;
-
 use super::{
-    cell::{Cell, CellRef},
-    equation::{Equation, EquationDisplay, VarPort},
-    term::TermRef,
-    var::VarRef,
+    store::Store,
+    term::{Cell, Term, TermPtr},
+    var::{Var, VarUse},
 };
-
-pub trait NetBuilder {
-    fn head<T: Into<TermRef>>(&mut self, term_ref: T);
-
-    fn var(&mut self) -> (VarPort, VarPort);
-
-    fn ctr<T1: Into<TermRef>, T2: Into<TermRef>>(
-        &mut self,
-        VarPort_0: T1,
-        VarPort_1: T2,
-    ) -> CellRef;
-
-    fn dup<T1: Into<TermRef>, T2: Into<TermRef>>(
-        &mut self,
-        VarPort_0: T1,
-        VarPort_1: T2,
-    ) -> CellRef;
-
-    fn era(&mut self) -> CellRef;
-
-    fn bind(&mut self, wire: VarPort, cell: CellRef);
-
-    fn redex(&mut self, left: CellRef, right: CellRef);
-
-    fn connect(&mut self, left: VarPort, right: VarPort);
-}
 
 #[derive(Debug)]
 pub struct Net {
-    pub(crate) head: Vec<TermRef>,
-    pub(crate) body: Vec<Equation>,
+    pub(crate) head: Vec<TermPtr>,
+    pub(crate) body: Vec<(TermPtr, TermPtr)>,
     pub(crate) store: Store,
 }
 
 impl Net {
-    pub fn new(capacity: u32) -> Self {
+    pub fn new() -> Self {
         Net {
             head: Default::default(),
             body: Default::default(),
-            store: Store::new(capacity),
+            store: Store::new(),
         }
     }
-
-    fn alloc_cell(&self, cell: Option<Cell>) -> CellRef {
-        let term = cell.map(|c| c.into());
-        let cell_ref = self.store.alloc_cell(term);
-        debug!(
-            "Allocated store[{}]={}",
-            cell_ref.get_ref().unwrap().get_index(),
-            self.store.display_cell(&cell_ref)
-        );
-        cell_ref
-    }
-
-    fn alloc_var(&self) -> VarRef {
-        let var_ref = self.store.alloc_var();
-        debug!("Allocated store[{}]={}", var_ref, var_ref);
-        var_ref
-    }
-
-    /// Consume the cell identified by the given CellRef. Note that we consume the cell linearly
-    fn consume_cell(&self, cell_ref: CellRef) -> Cell {
-        match cell_ref {
-            CellRef::Era => panic!("Cannot get unboxed ERA from store"),
-            CellRef::Ref(ptr) => {
-                debug!("Consume CELL[{:?}]", ptr);
-                self.store
-                    .consume_cell(ptr)
-                    .expect("Expected cell, found nothing")
-                    .try_into()
-                    .unwrap()
-            }
+    pub fn with_capacity(capacity: u32) -> Self {
+        Net {
+            head: Default::default(),
+            body: Default::default(),
+            store: Store::with_capacity(capacity),
         }
     }
+}
 
-    pub fn display_equation<'a>(&'a self, eqn: &'a Equation, store: &'a Store) -> EquationDisplay {
-        EquationDisplay(eqn, store)
-    }
+pub trait NetBuilder {
+    fn head<T>(&mut self, term_ref: T)
+    where
+        T: Into<TermPtr>;
+
+    fn var(&mut self) -> (VarUse, VarUse);
+
+    fn lam<T1, T2>(&mut self, binding: T1, body: T2) -> TermPtr
+    where
+        T1: Into<TermPtr>,
+        T2: Into<TermPtr>;
+
+    fn app<T1, T2>(&mut self, result: T1, arg: T2) -> TermPtr
+    where
+        T1: Into<TermPtr>,
+        T2: Into<TermPtr>;
+
+    fn dup<T1, T2>(&mut self, left: T1, right: T2) -> TermPtr
+    where
+        T1: Into<TermPtr>,
+        T2: Into<TermPtr>;
+
+    fn era(&mut self) -> TermPtr;
+
+    fn eqn<T1, T2>(&mut self, left: T1, right: T2)
+    where
+        T1: Into<TermPtr>,
+        T2: Into<TermPtr>;
 }
 
 impl NetBuilder for Net {
-    fn head<T: Into<TermRef>>(&mut self, term_ref: T) {
-        self.head.push(term_ref.into())
+    fn head<T: Into<TermPtr>>(&mut self, term_ptr: T) {
+        self.head.push(term_ptr.into());
     }
 
-    fn var(&mut self) -> (VarPort, VarPort) {
-        let ptr = self.alloc_var();
-        (VarPort { ptr }, VarPort { ptr })
+    fn var(&mut self) -> (VarUse, VarUse) {
+        let var_ptr = self.store.alloc(Term::Var(Var::new()).into());
+        let var_port_0 = VarUse::new(var_ptr);
+        let var_port_1 = VarUse::new(var_ptr);
+        (var_port_0, var_port_1)
     }
 
-    fn ctr<T1: Into<TermRef>, T2: Into<TermRef>>(
-        &mut self,
-        VarPort_0: T1,
-        VarPort_1: T2,
-    ) -> CellRef {
-        self.alloc_cell(Cell::Ctr(VarPort_0.into(), VarPort_1.into()).into())
-            .into()
+    fn lam<T1, T2>(&mut self, binding: T1, body: T2) -> TermPtr
+    where
+        T1: Into<TermPtr>,
+        T2: Into<TermPtr>,
+    {
+        let lam = Cell::Lam((binding.into(), body.into()).into());
+        let cell_ptr = self.store.alloc(Term::Cell(lam).into());
+        TermPtr::Ptr(cell_ptr)
     }
 
-    fn dup<T1: Into<TermRef>, T2: Into<TermRef>>(
-        &mut self,
-        VarPort_0: T1,
-        VarPort_1: T2,
-    ) -> CellRef {
-        self.alloc_cell(Cell::Dup(VarPort_0.into(), VarPort_1.into()).into())
-            .into()
+    fn app<T1, T2>(&mut self, lam: T1, arg: T2) -> TermPtr
+    where
+        T1: Into<TermPtr>,
+        T2: Into<TermPtr>,
+    {
+        let app = Cell::App((lam.into(), arg.into()).into());
+        let cell_ptr = self.store.alloc(Term::Cell(app).into());
+        TermPtr::Ptr(cell_ptr)
     }
 
-    fn era(&mut self) -> CellRef {
-        CellRef::Era
+    fn dup<T1, T2>(&mut self, left: T1, right: T2) -> TermPtr
+    where
+        T1: Into<TermPtr>,
+        T2: Into<TermPtr>,
+    {
+        let dup = Cell::Dup((left.into(), right.into()).into(), None);
+        let cell_ptr = self.store.alloc(Term::Cell(dup).into());
+        TermPtr::Ptr(cell_ptr)
     }
 
-    fn bind(&mut self, wire: VarPort, cell: CellRef) {
-        self.body.push(Equation::Bind {
-            var_ref: wire.ptr,
-            cell_ref: cell,
-        });
+    fn era(&mut self) -> TermPtr {
+        TermPtr::Era
     }
 
-    fn redex(&mut self, left: CellRef, right: CellRef) {
-        self.body.push(Equation::Redex {
-            left_ref: left,
-            right_ref: right,
-        });
-    }
-
-    fn connect(&mut self, left: VarPort, right: VarPort) {
-        self.body.push(Equation::Connect {
-            left_ref: left.ptr,
-            right_ref: right.ptr,
-        });
-    }
-
-    // fn free<T: Into<TermRef>>(&mut self, term: T) -> VarPort {
-    //     let free = self.var();
-    //     match term.into() {
-    //         TermRef::CellRef(cell_ref) => self.body.push(Equation::Bind {
-    //             var_ref: free.0.ptr,
-    //             cell_ref,
-    //         }),
-    //         TermRef::VarRef(var_ref) => self.body.push(Equation::Connect {
-    //             left_ref: free.0.ptr,
-    //             right_ref: var_ref,
-    //         }),
-    //     };
-    //     free.0
-    // }
-}
-struct NetHead<'a>(&'a Net);
-impl Display for NetHead<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let head = &self.0.head;
-        let mut head_iter = head.iter();
-        if let Some(term_ref) = head_iter.next() {
-            write!(f, "{}", self.0.store.display_term(term_ref))?;
-            for head in head_iter {
-                write!(f, ", {}", self.0.store.display_term(term_ref))?;
-            }
-        }
-        return Ok(());
+    fn eqn<T1: Into<TermPtr>, T2: Into<TermPtr>>(&mut self, left: T1, right: T2) {
+        self.body.push((left.into(), right.into()));
     }
 }
 
-struct NetBody<'a>(&'a Net);
-impl Display for NetBody<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let body = &self.0.body;
-        let mut body_iter = body.iter();
-        if let Some(eqn) = body_iter.next() {
-            write!(f, "{}", self.0.display_equation(eqn, &self.0.store))?;
-            for eqn in body_iter {
-                write!(f, ", {}", self.0.display_equation(eqn, &self.0.store))?;
-            }
-        }
-        return Ok(());
-    }
-}
-impl Display for Net {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "≪ {} | {} ≫", NetHead(self), NetBody(self));
+#[cfg(test)]
+mod tests {
+    use tracing::info;
+
+    use crate::strandal::{
+        net::{Net, NetBuilder},
+        runtime::Runtime,
+    };
+
+    #[test]
+    fn test_net() {
+        let mut net = Net::new();
+        let r = net.var();
+        let i1_var = net.var();
+        let i1 = net.lam(i1_var.0, i1_var.1);
+        let i2_var = net.var();
+        let i2 = net.lam(i2_var.0, i2_var.1);
+        let app = net.app(r.0, i2);
+        net.head(r.1);
+        net.eqn(i1, app);
+
+        let mut runtime = Runtime::new();
+        runtime.eval(&mut net);
+
+        info!("net: {}", runtime.stats);
     }
 }

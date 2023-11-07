@@ -1,60 +1,55 @@
-use std::fmt::Display;
-
-use crate::strandal::store::Store;
-
 use super::{
-    cell::{Cell, CellRef},
-    equation::VarPort,
-    var::{Var, VarRef},
+    store::Ptr,
+    var::{Var, VarUse},
 };
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum TermRef {
-    CellRef(CellRef),
-    VarRef(VarRef),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TermPtr {
+    Era,
+    Ptr(Ptr),
+}
+unsafe impl Send for TermPtr {}
+unsafe impl Sync for TermPtr {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cell {
+    Dup(Option<(TermPtr, TermPtr)>, Option<Ptr>),
+    App(Option<(TermPtr, TermPtr)>),
+    Lam(Option<(TermPtr, TermPtr)>),
 }
 
-#[derive(Debug)]
+unsafe impl Send for Cell {}
+unsafe impl Sync for Cell {}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Term {
     Var(Var),
     Cell(Cell),
 }
+impl<'a> TryFrom<&'a Term> for &'a Cell {
+    type Error = &'a Term;
 
-impl From<VarRef> for TermRef {
-    fn from(value: VarRef) -> Self {
-        TermRef::VarRef(value)
-    }
-}
-
-impl From<VarPort> for TermRef {
-    fn from(value: VarPort) -> Self {
-        value.ptr.into()
-    }
-}
-
-impl From<Cell> for Term {
-    fn from(cell: Cell) -> Self {
-        Term::Cell(cell)
-    }
-}
-
-impl From<Var> for Term {
-    fn from(var: Var) -> Self {
-        Term::Var(var)
-    }
-}
-
-pub struct TermRefDisplay<'a> {
-    pub(crate) term_ref: &'a TermRef,
-    pub(crate) store: &'a Store,
-}
-impl<'a> Display for TermRefDisplay<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.term_ref {
-            TermRef::CellRef(cell_ref) => {
-                write!(f, "{}", self.store.display_cell(cell_ref),)
-            }
-            TermRef::VarRef(var_ref) => write!(f, "{}", var_ref),
+    fn try_from(value: &'a Term) -> Result<Self, Self::Error> {
+        match value {
+            Term::Cell(cell) => Ok(cell),
+            _ => Err(value),
         }
+    }
+}
+
+impl<'a> TryFrom<&'a Term> for &'a Var {
+    type Error = &'a Term;
+
+    fn try_from(value: &'a Term) -> Result<Self, Self::Error> {
+        match value {
+            Term::Var(var) => Ok(var),
+            _ => Err(value),
+        }
+    }
+}
+
+impl From<VarUse> for TermPtr {
+    fn from(value: VarUse) -> Self {
+        TermPtr::Ptr(value.ptr())
     }
 }

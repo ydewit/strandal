@@ -4,7 +4,7 @@ mod strandal;
 use lambda::{dup, id};
 use strandal::net::Net;
 
-use tracing::{debug, info};
+use tracing::info;
 
 use crate::{
     lambda::m_2,
@@ -14,27 +14,29 @@ use crate::{
 fn main() {
     tracing_subscriber::fmt::init();
 
-    let mut net = Net::new(1 << 30);
+    let mut net = Net::with_capacity(1 << 30);
+
+    //
     let id = id(&mut net);
     let dup = dup(&mut net);
     let m2 = m_2(&mut net);
-    net.connect(id, dup);
+    net.eqn(id, dup);
     net.head(m2.0);
 
-    info!("Initial Net: {}", net);
+    //
+    let r = net.var();
+    let i1_var = net.var();
+    let i1 = net.lam(i1_var.0, i1_var.1);
+    let i2_var = net.var();
+    let i2 = net.lam(i2_var.0, i2_var.1);
+    let app = net.app(r.0, i2);
+    net.head(r.1);
+    net.eqn(i1, app);
+
+    // info!("Initial Net: {}", net);
 
     let mut runtime = Runtime::new();
     runtime.eval(&mut net);
-
-    for term in net.store.iter().enumerate() {
-        debug!("Heap: {} -> {:?}", term.0, term.1);
-    }
-
-    info!("Final Net: {}", net);
-    info!("Redexes: {}", runtime.redexes());
-    info!("Binds: {}", runtime.binds());
-    info!("Connects: {}", runtime.connects());
-    info!("Annihilations: {}", runtime.annihilations());
-    info!("Commutations: {}", runtime.commutations());
-    info!("Erasures: {}", runtime.erasures());
+    // info!("Final Net: {}", net);
+    info!("{}", runtime.stats);
 }
