@@ -945,9 +945,11 @@ impl Runtime {
             app_ptr,
             app_ports,
             |app_ports, _| Cell::App(app_ports),
+            false,
             dup_ptr,
             dup_ports,
             |dup_ports, lbl| Cell::Dup(dup_ports, lbl),
+            true,
             free_ptrs,
             stats,
         )
@@ -981,9 +983,11 @@ impl Runtime {
             lam_ptr,
             lam_ports,
             |ports, _| Cell::App(ports),
+            false,
             dup_ptr,
             dup_ports,
             |ports, lbl| Cell::Dup(ports, lbl),
+            true,
             free_ptrs,
             stats,
         )
@@ -1022,10 +1026,10 @@ impl Runtime {
     //     store.set(ptr, Term::Var(Var::new()));
     // }
 
-    // #[inline]
-    // fn reuse_cell(&self, store: &Store, ptr: Ptr, cell: Cell) {
-    //     store.set(ptr, Term::Cell(cell));
-    // }
+    #[inline]
+    fn reuse_cell(&self, store: &Store, ptr: Ptr, cell: Cell) {
+        store.set(ptr, Term::Cell(cell));
+    }
 
     #[inline]
     fn commute<'scope>(
@@ -1035,9 +1039,11 @@ impl Runtime {
         left_ptr: Option<Ptr>,
         left_ports: Option<(TermPtr, TermPtr)>,
         left_fn: impl Fn(Option<(TermPtr, TermPtr)>, Option<Ptr>) -> Cell,
+        left_alloc: bool,
         right_ptr: Option<Ptr>,
         right_ports: Option<(TermPtr, TermPtr)>,
         right_fn: impl Fn(Option<(TermPtr, TermPtr)>, Option<Ptr>) -> Cell,
+        right_alloc: bool,
         free_ptrs: &mut FreePtrs,
         stats: &mut LocalStats,
     ) {
@@ -1054,11 +1060,32 @@ impl Runtime {
             let x4 = TermPtr::Ptr(self.alloc_var(store, stats));
 
             // duplicate left cell (we dont allocate it in the store)
-            let left_0: Cell = left_fn(Some((x1, x3)), None);
-            let left_1 = left_fn(Some((x4, x2)), None);
+            let left_1_ptr = if left_alloc {
+                Some(free_ptrs.pop().unwrap()) // we know we have at least two (see above)
+            } else {
+                None
+            };
+            let left_0 = left_fn(Some((x1, x3)), left_1_ptr);
+            let left_0_ptr = if left_alloc {
+                Some(self.alloc_cell(store, Some(left_0), stats))
+            } else {
+                None
+            };
+            let left_1 = left_fn(Some((x4, x2)), left_0_ptr);
+
             // duplicate right cell (we dont allocate it in the store)
-            let right_0 = right_fn(Some((x4, x1)), None);
-            let right_1 = right_fn(Some((x2, x3)), None);
+            let right_1_ptr = if right_alloc {
+                Some(free_ptrs.pop().unwrap()) // we know we have at least two (see above)
+            } else {
+                None
+            };
+            let right_0 = right_fn(Some((x4, x1)), left_1_ptr);
+            let right_0_ptr = if right_alloc {
+                Some(self.alloc_cell(store, Some(right_0), stats))
+            } else {
+                None
+            };
+            let right_1 = left_fn(Some((x2, x3)), left_0_ptr);
 
             match (left_ports, right_ports) {
                 (None, None) => unreachable!(),
