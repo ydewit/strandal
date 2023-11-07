@@ -7,7 +7,7 @@ This Interaction Combinators engine introduces a few optimizations worth mention
 
 - **Structured concurrency**: Leverages the power of the [Rayon crate](https://docs.rs/rayon/latest/rayon/) to implement structured concurrency, allowing us to manage task parallelism with fine-grained control and robust error handling. This means our computations are not only fast but also resilient and maintainable.
 - **Zero-cost erase cells**: Erase cells operate without additional allocation overhead, thanks to their unboxed representation.
-- **Optimized connections**: Self auxiliary port connections are directly established without the need for variable allocation.
+- **Optimized connections**: Self auxiliary port connections are directly established without the need for variable allocation. This optimization also extends to reductions by directly evaluating both sides as a direct equation.
 - **Efficient cell handling**: Cells exist transiently on the execution stack, only persisting in the store when explicitly assigned to a variable during reduction.
 - **Recycling of pointers**: Rather than deallocating, we recycle pointers to variables and cells, minimizing memory churn.
 - **Immutable Cells**: Cells are immutable and exist on the stack, while variables are mutable and passed by reference, ensuring thread safety during reduction.
