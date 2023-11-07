@@ -14,5 +14,10 @@ This Interaction Combinators engine introduces a few optimizations worth mention
 - **Local Statistics Gathering**: Each thread collects its own statistics to minimize contention, contributing to global statistics post-execution.
 - **Depth-first Reduction**: We prioritize depth of work within threads to avoid extraneous async task allocations and queuing, streamlining execution.
 
+Some known issues:
+- When walking linked Var's during binds or connects, the engine ends up reading the Var from the Store a second time.
+- Implement labels
+- Improve logging
+
 ## Acknowledgements
 I would like to express my gratitude to Victor Taelin and the [Higher Order Company](https://github.com/HigherOrderCO) (HoC) for their passionate work in the field of interaction nets and interaction combinators, which introduced me to these fascinating concepts.
