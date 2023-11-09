@@ -18,13 +18,12 @@ TODOs:
 - [ ] Reusable definitions
 - [ ] Parser
 - [ ] Tests
+- [ ] Implement labels
+- [ ] Add examples
+- [ ] Add benchmarks
 
 Some known issues:
 - When walking linked Var's during binds or connects, the engine ends up reading the Var from the Store a second time.
-- Implement labels
-- Improve logging
-- Add exemples
-- Add benchmarks
 
 ## Acknowledgements
 I would like to express my gratitude to Victor Taelin and the [Higher Order Company](https://github.com/HigherOrderCO) (HoC) for their passionate work in the field of interaction nets and interaction combinators, which introduced me to these fascinating concepts.
