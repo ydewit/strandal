@@ -33,7 +33,7 @@ impl Runtime {
         rayon::scope(|scope| {
             net.body.drain(..).for_each(|eqn| {
                 // eval this equation
-                self.spawn_eval_equation(scope, &net.store, eqn.0, eqn.1, None);
+                self.spawn_eval_equation(scope, &net.store, eqn.left, eqn.right, None);
             });
         });
         info!(

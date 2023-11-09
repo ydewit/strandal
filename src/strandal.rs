@@ -5,3 +5,4 @@ pub mod stats;
 pub mod store;
 pub mod term;
 pub mod var;
+pub mod parser;

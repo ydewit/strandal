@@ -4,27 +4,14 @@ use super::{
     var::{Var, VarUse},
 };
 
-#[derive(Debug)]
-pub struct Net {
-    pub(crate) head: Vec<TermPtr>,
-    pub(crate) body: Vec<(TermPtr, TermPtr)>,
-    pub(crate) store: Store,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Equation {
+    pub left: TermPtr,
+    pub right: TermPtr,
 }
-
-impl Net {
-    pub fn new() -> Self {
-        Net {
-            head: Default::default(),
-            body: Default::default(),
-            store: Store::new(),
-        }
-    }
-    pub fn with_capacity(capacity: u32) -> Self {
-        Net {
-            head: Default::default(),
-            body: Default::default(),
-            store: Store::with_capacity(capacity),
-        }
+impl Equation {
+    pub fn new(left: TermPtr, right: TermPtr) -> Self {
+        Self { left, right }
     }
 }
 
@@ -58,11 +45,37 @@ pub trait NetBuilder {
         T2: Into<TermPtr>;
 }
 
+#[derive(Debug)]
+pub struct Net {
+    pub(crate) head: Vec<TermPtr>,
+    pub(crate) body: Vec<Equation>,
+    pub(crate) store: Store,
+}
+
+impl Net {
+    pub fn new() -> Self {
+        Net {
+            head: Default::default(),
+            body: Default::default(),
+            store: Store::new(),
+        }
+    }
+    pub fn with_capacity(capacity: u32) -> Self {
+        Net {
+            head: Default::default(),
+            body: Default::default(),
+            store: Store::with_capacity(capacity),
+        }
+    }
+}
+
 impl NetBuilder for Net {
+    #[inline]
     fn head<T: Into<TermPtr>>(&mut self, term_ptr: T) {
         self.head.push(term_ptr.into());
     }
 
+    #[inline]
     fn var(&mut self) -> (VarUse, VarUse) {
         let var_ptr = self.store.alloc(Term::Var(Var::new()).into());
         let var_port_0 = VarUse::new(var_ptr);
@@ -70,6 +83,7 @@ impl NetBuilder for Net {
         (var_port_0, var_port_1)
     }
 
+    #[inline]
     fn lam<T1, T2>(&mut self, binding: T1, body: T2) -> TermPtr
     where
         T1: Into<TermPtr>,
@@ -80,6 +94,7 @@ impl NetBuilder for Net {
         TermPtr::Ptr(cell_ptr)
     }
 
+    #[inline]
     fn app<T1, T2>(&mut self, lam: T1, arg: T2) -> TermPtr
     where
         T1: Into<TermPtr>,
@@ -90,6 +105,7 @@ impl NetBuilder for Net {
         TermPtr::Ptr(cell_ptr)
     }
 
+    #[inline]
     fn dup<T1, T2>(&mut self, left: T1, right: T2) -> TermPtr
     where
         T1: Into<TermPtr>,
@@ -100,12 +116,14 @@ impl NetBuilder for Net {
         TermPtr::Ptr(cell_ptr)
     }
 
+    #[inline]
     fn era(&mut self) -> TermPtr {
         TermPtr::Era
     }
 
+    #[inline]
     fn eqn<T1: Into<TermPtr>, T2: Into<TermPtr>>(&mut self, left: T1, right: T2) {
-        self.body.push((left.into(), right.into()));
+        self.body.push(Equation::new(left.into(), right.into()));
     }
 }
 
