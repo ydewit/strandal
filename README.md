@@ -1,5 +1,5 @@
 🚧 **Note to Visitors:**
-This repository houses a Interaction Combinators engine, which is currently a work in progress (WIP). We're actively developing and refining the engine, so expect changes and enhancements. Your insights and contributions are welcome during this phase!
+This repository houses a Interaction Combinators engine, which is currently a work in progress (WIP).
 
 ## Implementation Features
 
